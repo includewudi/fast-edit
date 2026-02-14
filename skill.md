@@ -37,6 +37,13 @@ echo '{"files":[...]}' | $FE write --stdin
 # 类型检查
 $FE check FILE
 $FE check FILE --checker mypy
+
+# 从 OpenCode 存储中提取用户粘贴的大文件 (绕过 AI token 输出瓶颈)
+$FE save-pasted FILE                      # 自动找最近的大粘贴 (>=20行)
+$FE save-pasted FILE --min-lines 50       # 自定义行数阈值
+$FE save-pasted FILE --msg-id msg_xxx     # 指定消息 ID
+$FE save-pasted FILE --extract            # 提取 ```...``` 代码块
+$FE save-pasted FILE --nth 2              # 第2个最近的大粘贴
 ```
 
 ## 使用场景
@@ -50,6 +57,7 @@ $FE check FILE --checker mypy
 | 用户粘贴多份代码，保存多文件 | `write --stdin` |
 | 从剪贴板保存 | `paste` |
 | 编辑后类型检查 | `lsp_diagnostics` (推荐) 或 `check` |
+| 用户粘贴了超大文件 (600+行)，AI 无法 echo 输出 | `save-pasted` |
 
 ## Batch JSON 格式
 
@@ -110,6 +118,22 @@ printf '%s' "print('hello \$USER')" | base64 > /tmp/b64.txt
 cat /tmp/b64.txt | $FE paste /tmp/app.py --stdin --base64
 ```
 
+### 用户粘贴超大文件 (AI 输出会超时)
+
+当用户粘贴 600+ 行代码，AI 无法通过 echo/Write 输出全部内容时：
+
+```bash
+# 直接从 OpenCode 的本地存储提取，零 token 输出
+$FE save-pasted /tmp/big_file.php
+
+# 然后正常编辑
+$FE show /tmp/big_file.php 1 20
+$FE replace /tmp/big_file.php 10 12 "new content\n"
+```
+
+原理：用户粘贴的内容已存储在 `~/.local/share/opencode/storage/part/`，
+`save-pasted` 直接读取文件系统，不需要 AI 重新输出。
+
 ### 用户粘贴多份代码
 
 ```
@@ -136,10 +160,11 @@ EOF
 
 ```
 fast-edit/
-├── fast_edit.py   # CLI 入口 (118 行)
+├── fast_edit.py   # CLI 入口 (139 行)
 ├── core.py        # 文件 I/O (82 行)
 ├── edit.py        # 编辑操作 (181 行)
 ├── paste.py       # 粘贴/写入 (107 行)
+├── pasted.py      # OpenCode 存储提取 (194 行)
 ├── check.py       # 类型检查 (145 行)
 └── skill.md       # 本文档
 ```

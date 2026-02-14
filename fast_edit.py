@@ -11,6 +11,7 @@ Commands:
     paste FILE [--stdin] [--extract] [--base64]  Save from clipboard/stdin
     write [--stdin] [SPEC]           Batch write files from JSON
     check FILE [--checker NAME]      Type check Python file
+    save-pasted FILE [--min-lines N] [--msg-id ID] [--extract] [--nth N]
 
 Line numbers: 1-based, inclusive. Output: JSON.
 """
@@ -25,6 +26,7 @@ if SCRIPT_DIR not in sys.path:
 
 import edit
 import paste
+import pasted
 import check
 
 
@@ -104,6 +106,22 @@ def main():
             filepath = [x for x in rest if not x.startswith("--")][0]
             checker = get_arg(rest, "--checker")
             result = check.check(filepath, checker)
+        
+        # Save pasted content from OpenCode storage
+        elif cmd == "save-pasted" and rest:
+            filepath = [x for x in rest if not x.startswith("--")][0]
+            min_lines_str = get_arg(rest, "--min-lines")
+            min_lines = int(min_lines_str) if min_lines_str else 20
+            msg_id = get_arg(rest, "--msg-id")
+            nth_str = get_arg(rest, "--nth")
+            nth = int(nth_str) if nth_str else 1
+            result = pasted.save_pasted(
+                filepath,
+                min_lines=min_lines,
+                msg_id=msg_id,
+                extract="--extract" in rest,
+                nth=nth,
+            )
         
         else:
             result = {"status": "error", "message": f"Unknown command: {cmd}"}
