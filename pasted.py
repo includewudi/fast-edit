@@ -82,7 +82,88 @@ def _extract_pasted_content(text):
     if blocks:
         return max(blocks, key=len)
 
+    structural = _extract_structural_content(text)
+    if structural is not None:
+        return structural
+
     return text
+
+
+def _extract_structural_content(text):
+    """Detect and extract JSON/XML/array content from mixed text.
+
+    Finds the first line starting with { [ or <, tracks bracket depth
+    to locate the matching close, and returns the region if it dominates
+    the message (>= 80% of total lines).
+    """
+    lines = text.splitlines()
+    if not lines:
+        return None
+
+    OPENERS = {'{': '}', '[': ']'}
+    best = None
+
+    scan_from = 0
+    while scan_from < len(lines):
+        start_idx = None
+        opener_char = None
+        for i in range(scan_from, len(lines)):
+            stripped = lines[i].lstrip()
+            if stripped and stripped[0] in OPENERS:
+                start_idx = i
+                opener_char = stripped[0]
+                break
+
+        if start_idx is None or opener_char is None:
+            break
+
+        closer_char = OPENERS[opener_char]
+        depth = 0
+        end_idx = None
+        in_string = False
+        escape_next = False
+
+        for i in range(start_idx, len(lines)):
+            for ch in lines[i]:
+                if escape_next:
+                    escape_next = False
+                    continue
+                if ch == '\\' and in_string:
+                    escape_next = True
+                    continue
+                if ch == '"' and not escape_next:
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if ch == opener_char:
+                    depth += 1
+                elif ch == closer_char:
+                    depth -= 1
+                    if depth == 0:
+                        end_idx = i
+                        break
+            if end_idx is not None:
+                break
+
+        if end_idx is None:
+            break
+
+        span = end_idx - start_idx + 1
+        if best is None or span > best[0]:
+            best = (span, start_idx, end_idx)
+
+        scan_from = end_idx + 1
+
+    if best is None:
+        return None
+
+    span, start_idx, end_idx = best
+    total_lines = len(lines)
+    if total_lines > 0 and span / total_lines < 0.8:
+        return None
+
+    return "\n".join(lines[start_idx:end_idx + 1])
 
 
 def extract_code_blocks(text):
