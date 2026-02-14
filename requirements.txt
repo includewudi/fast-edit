@@ -1,0 +1,9 @@
+# Optional type checkers (for fast-edit check command)
+# Install one of these to enable type checking:
+# pip install basedpyright   # Recommended (fastest)
+# pip install pyright
+# pip install mypy
+
+basedpyright>=1.27.0
+pyright>=1.1.300
+mypy>=1.0.0
