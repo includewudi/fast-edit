@@ -92,9 +92,9 @@ def _extract_pasted_content(text):
 def _extract_structural_content(text):
     """Detect and extract JSON/XML/array content from mixed text.
 
-    Finds the first line starting with { [ or <, tracks bracket depth
-    to locate the matching close, and returns the region if it dominates
-    the message (>= 80% of total lines).
+    JSON/array: bracket depth tracking for { } [ ].
+    XML: first-last matching tag (e.g. <root>...</root>).
+    Returns the largest region if it covers >= 80% of total lines.
     """
     lines = text.splitlines()
     if not lines:
@@ -155,6 +155,11 @@ def _extract_structural_content(text):
 
         scan_from = end_idx + 1
 
+    xml = _find_xml_region(lines)
+    if xml is not None:
+        if best is None or xml[0] > best[0]:
+            best = xml
+
     if best is None:
         return None
 
@@ -164,6 +169,35 @@ def _extract_structural_content(text):
         return None
 
     return "\n".join(lines[start_idx:end_idx + 1])
+
+
+def _find_xml_region(lines):
+    xml_open = re.compile(r'^\s*<([a-zA-Z][\w.:_-]*)[\s>]')
+    start_idx = None
+    tag_name = None
+
+    for i, line in enumerate(lines):
+        m = xml_open.match(line)
+        if m:
+            start_idx = i
+            tag_name = m.group(1)
+            break
+
+    if start_idx is None or tag_name is None:
+        return None
+
+    close_pat = re.compile(r'</\s*' + re.escape(tag_name) + r'\s*>')
+    end_idx = None
+    for i in range(len(lines) - 1, start_idx - 1, -1):
+        if close_pat.search(lines[i]):
+            end_idx = i
+            break
+
+    if end_idx is None or end_idx == start_idx:
+        return None
+
+    span = end_idx - start_idx + 1
+    return (span, start_idx, end_idx)
 
 
 def extract_code_blocks(text):
