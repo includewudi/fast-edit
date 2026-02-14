@@ -1,6 +1,28 @@
 # Fast Edit
 
+[English](README.md) | [中文](README_CN.md)
+
 A fast, line-number-based file editing tool designed to bypass LSP latency, permission prompts, and history database overhead. Ideal for AI-assisted editing workflows.
+
+## Motivation
+
+If you've used AI coding tools like Cursor, Claude Code, or OpenCode, you've probably experienced this:
+
+> AI says "Let me edit this file", and then you wait…
+>
+> 3 seconds… 5 seconds… 10 seconds…
+>
+> Finally done, but there are two more places to change.
+>
+> Another 10 seconds… another 10 seconds…
+
+A simple three-location fix shouldn't take 30 seconds. Here's why the built-in Edit tool is slow:
+
+1. **String matching overhead** — AI must output both the old and new content as full strings. For a 500-line file with 3 edits, that's potentially thousands of tokens.
+2. **LSP synchronization** — After each edit, the editor waits for the Language Server to sync and check types. This typically takes 1–5 seconds per call.
+3. **Multiple round-trips** — 3 edits = 3 separate Edit calls, each with network latency + LSP wait.
+
+**Fast Edit takes a fundamentally different approach**: line-number addressing instead of string matching, batch operations instead of repeated calls, and direct file I/O that bypasses LSP entirely. The result? **100x faster editing** — a 500-line file with 3 edits drops from ~15 seconds to under 0.1 seconds.
 
 ## Features
 
