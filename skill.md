@@ -58,6 +58,7 @@ $FE save-pasted FILE --nth 2              # 第2个最近的大粘贴
 | 从剪贴板保存 | `paste` |
 | 编辑后类型检查 | `lsp_diagnostics` (推荐) 或 `check` |
 | 用户粘贴了超大文件 (600+行)，AI 无法 echo 输出 | `save-pasted` |
+| AI 从零创建大文件 (200+行)，无源文件可复制 | 分段 heredoc → `cat` 合并 → `paste --stdin` |
 
 ## Batch JSON 格式
 
@@ -133,6 +134,85 @@ $FE replace /tmp/big_file.php 10 12 "new content\n"
 
 原理：用户粘贴的内容已存储在 `~/.local/share/opencode/storage/part/`，
 `save-pasted` 直接读取文件系统，不需要 AI 重新输出。
+
+### 从零创建大文件 (200+ 行)
+
+> **⚠️ 判断是否需要分段的决策流程：**
+>
+> 这个技巧解决的**不是文件写入速度**问题（`paste --stdin` 本身写任意大小都很快），
+> 而是 **AI 单次 Bash 调用的 token 输出上限**——heredoc/echo 内容过长会被截断或超时。
+>
+> ```
+> AI 需要创建文件
+>   │
+>   ├─ 内容已存在于文件/用户粘贴？
+>   │    → 直接 paste --stdin / save-pasted，不需要分段
+>   │
+>   ├─ AI 从零生成，≤150 行？
+>   │    → 直接单次 heredoc 或 Write 工具，不需要分段
+>   │
+>   ├─ AI 从零生成，150-200 行？
+>   │    → 可以尝试单次，如果被截断再分段
+>   │
+>   └─ AI 从零生成，>200 行？
+>        → 直接用分段技巧，不要尝试单次（大概率会超时）
+> ```
+>
+> **不需要分段的场景（直接用对应命令即可）：**
+> | 场景 | 直接用 |
+> |------|--------|
+> | 用户粘贴了代码，保存到文件 | `paste --stdin` |
+> | 用户粘贴了超大文件 (600+行) | `save-pasted` |
+> | 已有文件 A，复制/修改后写入文件 B | `cat A \| paste B --stdin` 或 `batch` |
+> | AI 生成 ≤150 行的小文件 | 单次 heredoc / Write 工具 |
+
+当 AI 需要**从零生成**一个大文件（无源文件可 `cp`），且内容超过 ~200 行，
+单次 Write/echo/heredoc 会因 token 输出上限被截断或超时。
+用分段 heredoc + `cat` 合并 + `paste --stdin` 逐步累积：
+
+```bash
+FE="/Users/wudi/miniforge3/bin/python3 /Users/wudi/data/code/ai_tools/git_skills/wudi/fast-edit/fast_edit.py"
+
+# 第 1 段 (~80 行)
+cat > /tmp/part1.md << 'PART1'
+# Title
+...first ~80 lines...
+PART1
+
+# 第 2 段 (~80 行)
+cat > /tmp/part2.md << 'PART2'
+...next ~80 lines...
+PART2
+
+# 合并 → 写入目标
+cat /tmp/part1.md /tmp/part2.md > /tmp/combined.md
+$FE paste /path/to/target.md --stdin < /tmp/combined.md
+
+# 第 3 段 (~80 行)
+cat > /tmp/part3.md << 'PART3'
+...next ~80 lines...
+PART3
+
+# 追加合并 → 覆写目标
+cat /tmp/combined.md /tmp/part3.md > /tmp/combined2.md
+$FE paste /path/to/target.md --stdin < /tmp/combined2.md
+
+# 继续直到完成...
+
+# 清理
+rm -f /tmp/part*.md /tmp/combined*.md
+```
+
+**关键注意事项：**
+
+| 要点 | 说明 |
+|------|------|
+| 每段建议 120-160 行 | 太长 heredoc 可能超时；太短则轮次多（2000 行 ≈ 13-17 段） |
+| 用 `'MARKER'` 引号 | 防止 heredoc 内 `$变量` 被展开 |
+| **不要用** `insert --stdin` | 多行 stdin 时只写入 1 行 (已知限制) |
+| 用 `paste --stdin` | 覆写整个文件，所以每次要 `cat` 累积所有段 |
+| 用完整 python3 路径 | heredoc 内 `$FE` 变量可能不展开 |
+| 分段比单次慢 ~4x | 但单次 200+ 行会被截断，慢总比坏好 |
 
 ### 用户粘贴多份代码
 
