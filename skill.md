@@ -44,6 +44,8 @@ $FE save-pasted FILE --min-lines 50       # 自定义行数阈值
 $FE save-pasted FILE --msg-id msg_xxx     # 指定消息 ID
 $FE save-pasted FILE --extract            # 提取 ```...``` 代码块
 $FE save-pasted FILE --nth 2              # 第2个最近的大粘贴
+# 查看帮助 (推荐 AI 先看这个)
+$FE help
 ```
 
 ## 使用场景
@@ -86,9 +88,56 @@ $FE save-pasted FILE --nth 2              # 第2个最近的大粘贴
   ]
 }
 ```
-
 - `extract: true` 自动提取 \`\`\`...\`\`\` 代码块内容
 - `encoding: "base64"` 内容是 base64 编码，自动解码后写入
+## 返回格式
+
+### paste 命令返回
+
+```json
+{
+  "status": "ok",
+  "file": "/absolute/path/to/file.py",
+  "lines": 10,
+  "bytes": 256,
+  "timing": {
+    "start": "2026-02-22T15:01:04.304603",
+    "end": "2026-02-22T15:01:04.305128",
+    "elapsed_sec": 0.0005
+  }
+}
+```
+
+### write 命令返回
+```json
+{
+  "status": "ok",
+  "files": 2,
+  "results": [
+    {
+      "file": "/absolute/path/to/a.py",
+      "lines": 10,
+      "bytes": 256,
+      "elapsed_sec": 0.0004
+    },
+    {
+      "file": "/absolute/path/to/b.py",
+      "lines": 5,
+      "bytes": 128,
+      "elapsed_sec": 0.0003
+    }
+  ],
+  "timing": {
+    "start": "2026-02-22T15:02:21.808521",
+    "end": "2026-02-22T15:02:21.809282",
+    "elapsed_sec": 0.0008
+  }
+}
+```
+**时间统计说明：**
+- `timing.start` / `timing.end`: ISO 8601 格式的时间戳
+- `timing.elapsed_sec`: 总耗时（秒）
+- `results[].elapsed_sec`: 单个文件的耗时（仅 write 命令）
 
 ## 典型工作流
 

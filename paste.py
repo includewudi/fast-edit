@@ -8,6 +8,8 @@ import os
 import subprocess
 import re
 import base64
+import time
+from datetime import datetime
 from core import write_file
 
 
@@ -66,6 +68,9 @@ def paste(filepath, from_stdin=False, extract=False, encoding=None):
         extract: Extract code from ```...``` blocks
         encoding: Content encoding ('base64' or None)
     """
+    start_time = time.time()
+    start_dt = datetime.now().isoformat()
+    
     if from_stdin:
         content = sys.stdin.read()
     else:
@@ -81,11 +86,19 @@ def paste(filepath, from_stdin=False, extract=False, encoding=None):
     
     write_file(filepath, content)
     
+    end_time = time.time()
+    end_dt = datetime.now().isoformat()
+    elapsed_sec = round(end_time - start_time, 4)
     return {
         "status": "ok",
         "file": os.path.abspath(filepath),
         "lines": len(content.splitlines()),
-        "bytes": len(content.encode("utf-8"))
+        "bytes": len(content.encode("utf-8")),
+        "timing": {
+            "start": start_dt,
+            "end": end_dt,
+            "elapsed_sec": elapsed_sec
+        }
     }
 
 
@@ -101,29 +114,38 @@ def write(spec):
     Args:
         spec: JSON spec with file(s) to write
     """
+    start_time = time.time()
+    start_dt = datetime.now().isoformat()
     file_specs = spec.get("files", [spec])
     results = []
-    
     for file_spec in file_specs:
+        file_start_time = time.time()
         filepath = file_spec["file"]
         content = file_spec.get("content", "")
         encoding = file_spec.get("encoding")
-        
         content = decode_content(content, encoding)
-        
         if file_spec.get("extract", False):
             content = extract_code_blocks(content)
-        
         write_file(filepath, content)
-        
+        file_end_time = time.time()
+        file_elapsed_sec = round(file_end_time - file_start_time, 4)
         results.append({
             "file": os.path.abspath(filepath),
             "lines": len(content.splitlines()),
-            "bytes": len(content.encode("utf-8"))
+            "bytes": len(content.encode("utf-8")),
+            "elapsed_sec": file_elapsed_sec
         })
     
+    end_time = time.time()
+    end_dt = datetime.now().isoformat()
+    total_elapsed_sec = round(end_time - start_time, 4)
     return {
         "status": "ok",
         "files": len(results),
-        "results": results
+        "results": results,
+        "timing": {
+            "start": start_dt,
+            "end": end_dt,
+            "elapsed_sec": total_elapsed_sec
+        }
     }

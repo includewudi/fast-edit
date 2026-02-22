@@ -30,6 +30,59 @@ import pasted
 import check
 
 
+def print_help():
+    """Print help with command examples (for AI to read correctly)."""
+    print("""
+fast_edit - AI file editing tool with line-number addressing
+
+COMMANDS:
+
+  show FILE START END
+    Show lines with line numbers (1-based, inclusive)
+    Example: $FE show myfile.py 10 20
+
+  replace FILE START END CONTENT
+    Replace line range with new content
+    Example: $FE replace myfile.py 5 7 "new content\\n"
+
+  insert FILE LINE CONTENT
+    Insert content after line (LINE=0 for prepend)
+    Example: $FE insert myfile.py 10 "import os\\n"
+
+  delete FILE START END
+    Delete line range
+    Example: $FE delete myfile.py 15 20
+
+  batch [--stdin] [SPEC]
+    Batch edit from JSON (multiple edits in one call)
+    Example: $FE batch --stdin <<< '{"file":"a.py","edits":[...]}'
+
+  paste FILE [--stdin] [--extract] [--base64]
+    Save content from clipboard/stdin to file
+    Example: echo "code" | $FE paste output.py --stdin
+
+  write [--stdin] [SPEC]
+    Batch write multiple files from JSON
+    Example: $FE write --stdin <<< '{"files":[{"file":"a.py","content":"..."}]}'
+
+  check FILE [--checker NAME]
+    Type check Python file (auto-detect: basedpyright/pyright/mypy)
+    Example: $FE check myfile.py
+
+  save-pasted FILE [--min-lines N] [--msg-id ID] [--extract] [--nth N]
+    Save pasted content from OpenCode storage (for large pastes)
+    Example: $FE save-pasted /tmp/file.py
+
+  help
+    Show this help message
+
+NOTES:
+  - Line numbers are 1-based and inclusive
+  - Use \\n for newlines in content
+  - Output is always JSON format
+""")
+
+
 def parse_content(text):
     """Parse CLI content argument, expanding escape sequences."""
     return text.replace("\\n", "\n").replace("\\t", "\t")
@@ -47,8 +100,8 @@ def get_arg(args, flag):
 def main():
     args = sys.argv[1:]
     
-    if not args:
-        print(__doc__)
+    if not args or args[0] == "help":
+        print_help()
         sys.exit(0)
     
     cmd = args[0]
