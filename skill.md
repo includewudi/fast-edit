@@ -10,42 +10,39 @@ description: 大文件编辑、批量修改、剪贴板/stdin粘贴、多文件�
 ## 命令速查
 
 ```bash
-# 用函数定义（兼容 zsh/bash）
-function FE { python3 /path/to/fast-edit/fast_edit.py "$@"; }
+# 直接调用（推荐，兼容所有 shell）
+FE=python3 /path/to/fast-edit/fast_edit.py
+
+# 所有命令支持 fast-* 前缀避免 shell 内置命令冲突
+# 如: fast-write, fast-paste, fast-batch
 
 # 预览
 $FE show FILE START END
-
-# 编辑 (行号 1-based, inclusive)
 $FE replace FILE START END "content\n"
 $FE insert FILE LINE "content\n"        # LINE=0 表示开头
 $FE delete FILE START END
+# 批量编辑 (JSON) - 用 fast-batch 避免冲突
+$FE fast-batch spec.json
+echo '{"file":"a.py","edits":[...]}' | $FE fast-batch --stdin
 
-# 批量编辑 (JSON)
-$FE batch spec.json
-echo '{"file":"a.py","edits":[...]}' | $FE batch --stdin
+# 粘贴保存 - 用 fast-paste 避免冲突
+$FE fast-paste FILE                    # 从剪贴板
+$FE fast-paste FILE --stdin            # 从 stdin
+$FE fast-paste FILE --stdin --extract  # 提取 ```...``` 代码块
+$FE fast-paste FILE --stdin --base64   # stdin 内容是 base64 编码
 
-# 粘贴保存
-$FE paste FILE                    # 从剪贴板
-$FE paste FILE --stdin            # 从 stdin
-$FE paste FILE --stdin --extract  # 提取 ```...``` 代码块
-$FE paste FILE --stdin --base64   # stdin 内容是 base64 编码
-
-# 批量写文件 (多文件创建)
-$FE write spec.json
-echo '{"files":[...]}' | $FE write --stdin
+# 批量写文件 (多文件创建) - 用 fast-write 避免冲突
+$FE fast-write spec.json
+echo '{"files":[...]}' | $FE fast-write --stdin
 
 # 类型检查
 $FE check FILE
 $FE check FILE --checker mypy
-
-# 从 OpenCode 存储中提取用户粘贴的大文件 (绕过 AI token 输出瓶颈)
 $FE save-pasted FILE                      # 自动找最近的大粘贴 (>=20行)
 $FE save-pasted FILE --min-lines 50       # 自定义行数阈值
 $FE save-pasted FILE --msg-id msg_xxx     # 指定消息 ID
 $FE save-pasted FILE --extract            # 提取 ```...``` 代码块
 $FE save-pasted FILE --nth 2              # 第2个最近的大粘贴
-# 查看帮助 (推荐 AI 先看这个)
 $FE help
 ```
 
@@ -221,8 +218,7 @@ $FE replace /tmp/big_file.php 10 12 "new content\n"
 用分段 heredoc + `cat` 合并 + `paste --stdin` 逐步累积：
 
 ```bash
-function FE { python3 /path/to/fast-edit/fast_edit.py "$@"; }
-
+FE=(python3 /path/to/fast-edit/fast_edit.py)
 # 第 1 段 (~80 行)
 cat > /tmp/part1.md << 'PART1'
 # Title

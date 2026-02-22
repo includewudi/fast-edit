@@ -34,52 +34,35 @@ def print_help():
     """Print help with command examples (for AI to read correctly)."""
     print("""
 fast_edit - AI file editing tool with line-number addressing
-
-COMMANDS:
-
+COMMANDS (all support fast-* prefix, e.g. fast-write, fast-paste):
   show FILE START END
     Show lines with line numbers (1-based, inclusive)
     Example: $FE show myfile.py 10 20
-
-  replace FILE START END CONTENT
     Replace line range with new content
     Example: $FE replace myfile.py 5 7 "new content\\n"
-
-  insert FILE LINE CONTENT
     Insert content after line (LINE=0 for prepend)
     Example: $FE insert myfile.py 10 "import os\\n"
-
-  delete FILE START END
     Delete line range
     Example: $FE delete myfile.py 15 20
-
-  batch [--stdin] [SPEC]
     Batch edit from JSON (multiple edits in one call)
-    Example: $FE batch --stdin <<< '{"file":"a.py","edits":[...]}'
-
+    Example: $FE fast-batch --stdin <<< '{"file":"a.py","edits":[...]}'
   paste FILE [--stdin] [--extract] [--base64]
     Save content from clipboard/stdin to file
-    Example: echo "code" | $FE paste output.py --stdin
-
+    Example: echo "code" | $FE fast-paste output.py --stdin
   write [--stdin] [SPEC]
     Batch write multiple files from JSON
-    Example: $FE write --stdin <<< '{"files":[{"file":"a.py","content":"..."}]}'
-
+    Example: $FE fast-write --stdin <<< '{"files":[{"file":"a.py","content":"..."}]}'
   check FILE [--checker NAME]
     Type check Python file (auto-detect: basedpyright/pyright/mypy)
     Example: $FE check myfile.py
-
-  save-pasted FILE [--min-lines N] [--msg-id ID] [--extract] [--nth N]
     Save pasted content from OpenCode storage (for large pastes)
     Example: $FE save-pasted /tmp/file.py
-
   help
     Show this help message
-
-NOTES:
   - Line numbers are 1-based and inclusive
   - Use \\n for newlines in content
   - Output is always JSON format
+  - Use fast-* prefix to avoid shell builtin conflicts (write/paste/batch)
 """)
 
 
@@ -109,26 +92,26 @@ def main():
     
     try:
         # Show lines
-        if cmd == "show" and len(rest) >= 3:
+        if cmd in ("show", "fast-show") and len(rest) >= 3:
             result = edit.show(rest[0], int(rest[1]), int(rest[2]))
         
         # Replace lines
-        elif cmd == "replace" and len(rest) >= 4:
+        elif cmd in ("replace", "fast-replace") and len(rest) >= 4:
             result = edit.replace(
                 rest[0], int(rest[1]), int(rest[2]), 
                 parse_content(rest[3])
             )
         
         # Insert after line
-        elif cmd == "insert" and len(rest) >= 3:
+        elif cmd in ("insert", "fast-insert") and len(rest) >= 3:
             result = edit.insert(rest[0], int(rest[1]), parse_content(rest[2]))
         
         # Delete lines
-        elif cmd == "delete" and len(rest) >= 3:
+        elif cmd in ("delete", "fast-delete") and len(rest) >= 3:
             result = edit.delete(rest[0], int(rest[1]), int(rest[2]))
         
         # Batch edit
-        elif cmd == "batch":
+        elif cmd in ("batch", "fast-batch"):
             if "--stdin" in rest:
                 spec = json.load(sys.stdin)
             else:
@@ -136,7 +119,7 @@ def main():
             result = edit.batch(spec)
         
         # Paste from clipboard/stdin
-        elif cmd == "paste" and rest:
+        elif cmd in ("paste", "fast-paste") and rest:
             filepath = [x for x in rest if not x.startswith("--")][0]
             encoding = "base64" if "--base64" in rest else None
             result = paste.paste(
@@ -147,7 +130,7 @@ def main():
             )
         
         # Write files from JSON
-        elif cmd == "write":
+        elif cmd in ("write", "fast-write"):
             if "--stdin" in rest:
                 spec = json.load(sys.stdin)
             else:
@@ -155,13 +138,13 @@ def main():
             result = paste.write(spec)
         
         # Type check
-        elif cmd == "check" and rest:
+        elif cmd in ("check", "fast-check") and rest:
             filepath = [x for x in rest if not x.startswith("--")][0]
             checker = get_arg(rest, "--checker")
             result = check.check(filepath, checker)
         
         # Save pasted content from OpenCode storage
-        elif cmd == "save-pasted" and rest:
+        elif cmd in ("save-pasted", "fast-save-pasted") and rest:
             filepath = [x for x in rest if not x.startswith("--")][0]
             min_lines_str = get_arg(rest, "--min-lines")
             min_lines = int(min_lines_str) if min_lines_str else 20
