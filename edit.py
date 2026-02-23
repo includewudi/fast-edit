@@ -9,6 +9,23 @@ from core import (
 )
 
 
+_auto_backup = True
+
+
+def _maybe_backup(filepath):
+    """Create backup before editing if auto_backup is enabled."""
+    if not _auto_backup:
+        return None
+    abs_path = os.path.abspath(filepath)
+    if not os.path.isfile(abs_path):
+        return None
+    try:
+        import verify
+        return verify.backup(filepath)
+    except Exception:
+        return None  # backup failure should never block editing
+
+
 def show(filepath, start, end):
     """Show lines with line numbers (for preview before editing)."""
     lines = read_lines(filepath)
@@ -35,6 +52,7 @@ def show(filepath, start, end):
 
 def replace(filepath, start, end, content):
     """Replace lines start..end with new content."""
+    _maybe_backup(filepath)
     lines = read_lines(filepath)
     validate_range(start, end, len(lines), "replace")
     
@@ -60,6 +78,7 @@ def replace(filepath, start, end, content):
 
 def insert(filepath, after_line, content):
     """Insert content after specified line (0 = prepend to file)."""
+    _maybe_backup(filepath)
     lines = read_lines(filepath)
     
     if after_line < 0 or after_line > len(lines):
@@ -91,6 +110,7 @@ def insert(filepath, after_line, content):
 
 def delete(filepath, start, end):
     """Delete lines start..end."""
+    _maybe_backup(filepath)
     lines = read_lines(filepath)
     validate_range(start, end, len(lines), "delete")
     
@@ -126,6 +146,7 @@ def batch(spec):
         filepath = file_spec["file"]
         edits = file_spec["edits"]
         
+        _maybe_backup(filepath)
         lines = read_lines(filepath)
         le = detect_line_ending(lines)
         

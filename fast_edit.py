@@ -12,6 +12,10 @@ Commands:
     write [--stdin] [SPEC]           Batch write files from JSON
     check FILE [--checker NAME]      Type check Python file
     save-pasted FILE [--min-lines N] [--msg-id ID] [--extract] [--nth N]
+    verify FILE [--context N]          Compare file with backup
+    restore FILE                       Restore file from backup
+    backups FILE                       List all backups for file
+    verify-syntax FILE                 Run language-aware syntax check
 
 Line numbers: 1-based, inclusive. Output: JSON.
 """
@@ -28,6 +32,7 @@ import edit
 import paste
 import pasted
 import check
+import verify
 
 
 def print_help():
@@ -158,6 +163,24 @@ def main():
                 extract="--extract" in rest,
                 nth=nth,
             )
+
+        # Verify: compare with backup
+        elif cmd in ("verify", "fast-verify") and rest:
+            filepath = [x for x in rest if not x.startswith("--")][0]
+            context = int(get_arg(rest, "--context") or 1)
+            result = verify.verify(filepath, context)
+        
+        # Restore from backup
+        elif cmd in ("restore", "fast-restore") and rest:
+            result = verify.restore(rest[0])
+        
+        # List backups
+        elif cmd in ("backups", "fast-backups") and rest:
+            result = verify.list_backups(rest[0])
+        
+        # Syntax check (language-aware)
+        elif cmd in ("verify-syntax", "fast-verify-syntax") and rest:
+            result = verify.verify_syntax(rest[0])
         
         else:
             result = {"status": "error", "message": f"Unknown command: {cmd}"}
