@@ -55,12 +55,29 @@ $FE help
 ```
 
 ## 使用场景
+> **⚡ 粘贴保存优先级**: 用户粘贴代码需要保存时，**始终优先尝试 `save-pasted`**。
+> 它直接从 OpenCode 本地存储提取，零 token 输出、零 shell 转义问题。
+> 仅当 `save-pasted` 不可用（如内容非用户粘贴、或存储中找不到）时，才降级到 `paste --stdin`。
 
+```
+用户粘贴了代码，要求保存到文件
+  │
+  ├─ 首选: save-pasted FILE
+  │    零 token、零转义、自动从本地存储提取
+  │    150+ 行时强烈推荐（echo/heredoc 可能截断）
+  │
+  ├─ 降级: paste FILE --stdin (< 150 行、save-pasted 失败时)
+  │    echo '内容' | $FE paste FILE --stdin
+  │
+  └─ 特殊字符多: paste FILE --stdin --base64
+       含 $、反引号、引号嵌套时用 base64 编码
+```
 | 场景 | 命令 |
 |------|------|
 | 大文件 (100+ 行) 小改动 | `replace` / `batch` |
 | 同文件多处编辑 | `batch` |
-| 用户粘贴代码到输入框，保存单文件 | `paste --stdin` |
+| **用户粘贴代码，保存文件（首选）** | **`save-pasted`** |
+| 用户粘贴代码，save-pasted 不可用时 | `paste --stdin` |
 | 用户粘贴含特殊字符的代码 | `paste --stdin --base64` |
 | 用户粘贴多份代码，保存多文件 | `write --stdin` |
 | 从剪贴板保存 | `paste` |
@@ -68,7 +85,6 @@ $FE help
 | 编辑改坏了，一键回滚 | `restore` |
 | 编辑后语法检查（多语言） | `verify-syntax` |
 | 编辑后类型检查 | `lsp_diagnostics` (推荐) 或 `check` |
-| 用户粘贴了超大文件 (600+行) | `save-pasted` |
 | AI 从零创建大文件 (200+行) | 分段 heredoc → `cat` 合并 → `paste --stdin` |
 
 ## 编辑后验证（推荐工作流）
@@ -362,6 +378,7 @@ json.dump(spec, sys.stdout)
 ## 典型工作流
 
 ### 用户粘贴代码到输入框
+> **首选 `save-pasted`**，失败时才用 `paste --stdin`。
 
 ```
 用户: 保存这个到 /tmp/app.py
@@ -371,6 +388,10 @@ def main():
 ```
 
 AI 执行:
+# 首选: 直接从本地存储提取（零 token）
+$FE save-pasted /tmp/app.py --extract
+
+# 降级: save-pasted 失败时
 echo '<用户粘贴的内容>' | $FE paste /tmp/app.py --stdin --extract
 ```
 
@@ -383,21 +404,23 @@ printf '%s' "print('hello \$USER')" | base64 > /tmp/b64.txt
 cat /tmp/b64.txt | $FE paste /tmp/app.py --stdin --base64
 ```
 
-### 用户粘贴超大文件 (AI 输出会超时)
+### 用户粘贴代码保存文件（首选 save-pasted）
 
-当用户粘贴 600+ 行代码，AI 无法通过 echo/Write 输出全部内容时：
-
+> **始终优先使用 `save-pasted`**，不论代码长短。
+> 150+ 行时强烈推荐 — echo/heredoc 可能截断。
 ```bash
 # 直接从 OpenCode 的本地存储提取，零 token 输出
-$FE save-pasted /tmp/big_file.php
+$FE save-pasted /tmp/app.py
 
+# 提取 ```...``` 代码块
+$FE save-pasted /tmp/app.py --extract
 # 然后正常编辑
-$FE show /tmp/big_file.php 1 20
-$FE replace /tmp/big_file.php 10 12 "new content\n"
+$FE show /tmp/app.py 1 20
+$FE replace /tmp/app.py 10 12 "new content\n"
 ```
-
 原理：用户粘贴的内容已存储在 `~/.local/share/opencode/storage/part/`，
 `save-pasted` 直接读取文件系统，不需要 AI 重新输出。
+**save-pasted 失败时**（找不到匹配的粘贴内容）才降级到 `paste --stdin`。
 
 ### 从零创建大文件 (200+ 行)
 
