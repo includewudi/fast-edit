@@ -41,7 +41,7 @@ Vue SFC 横跨 3 种语言区域（template / script / style），特殊字符�
 
 ### 1. show — 预览 template 区域（mustache + v-directives）
 ```bash
-$FE show UserList.vue 1 12
+fe show UserList.vue 1 12
 ```
 - **结果**: ✅ 正确显示
   - `{{ title }} ({{ filteredUsers.length }})` — 双花括号完整
@@ -51,7 +51,7 @@ $FE show UserList.vue 1 12
 
 ### 2. show — 预览 script 区域（模板字面量 + 泛型）
 ```bash
-$FE show UserList.vue 95 103
+fe show UserList.vue 95 103
 ```
 - **结果**: ✅ 正确显示
   - `` `${API_BASE}/users?${params}` `` — 模板字面量完整
@@ -61,13 +61,13 @@ $FE show UserList.vue 95 103
 
 ### 3. show — 预览 style 区域（CSS 属性）
 ```bash
-$FE show UserList.vue 137 145
+fe show UserList.vue 137 145
 ```
 - **结果**: ✅ CSS 属性完整显示
 
 ### 4. batch --stdin — 跨区域多编辑（4 个操作）
 ```bash
-python3 -c "json.dump(spec, sys.stdout)" | python3 $FE fast-batch --stdin
+python3 -c "json.dump(spec, sys.stdout)" | fe fast-batch --stdin
 ```
 编辑内容（覆盖 3 个 SFC 区域）：
 1. **template**: 插入 `<slot name="header-actions" :users="filteredUsers" />`
@@ -83,7 +83,7 @@ python3 -c "json.dump(spec, sys.stdout)" | python3 $FE fast-batch --stdin
 
 ### 5. verify — 对比差异
 ```bash
-$FE verify UserList.vue
+fe verify UserList.vue
 ```
 - **结果**: ✅ 4 个 change hunk
   - hunk 1: template 区域 — slot 插入
@@ -95,25 +95,25 @@ $FE verify UserList.vue
 
 ### 6. show — 验证 slot 插入
 ```bash
-$FE show UserList.vue 11 13
+fe show UserList.vue 11 13
 ```
 - **结果**: ✅ `<slot name="header-actions" :users="filteredUsers" />` 完整
 
 ### 7. show — 验证模板字面量
 ```bash
-$FE show UserList.vue 105 107
+fe show UserList.vue 105 107
 ```
 - **结果**: ✅ `` `[UserList] fetch failed (page=${page.value}, role=${props.role}):` `` 完整
 
 ### 8. show — 验证 CSS 变量
 ```bash
-$FE show UserList.vue 141 143
+fe show UserList.vue 141 143
 ```
 - **结果**: ✅ `--card-gap: 0.75rem` 正确位于 `.user-list` 块内
 
 ### 9. verify-syntax
 ```bash
-$FE verify-syntax UserList.vue
+fe verify-syntax UserList.vue
 ```
 - **结果**: ✅ `"checker": "none"`, `"message": "No syntax checker for .vue files"`
 - **说明**: `.vue` 文件无内置语法检查器，这是预期行为

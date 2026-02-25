@@ -3,7 +3,7 @@
 ## 测试环境
 
 ```bash
-FE="python3 /Users/wudi/data/code/ai_tools/git_skills/wudi/fast-edit/fast_edit.py"
+fe() { python3 "/path/to/fast-edit/fast_edit.py" "$@"; }
 TEST_DIR="/tmp/fast-edit-test"
 mkdir -p $TEST_DIR
 ```
@@ -24,7 +24,7 @@ def world():
 EOF
 
 # 测试: 显示 2-4 行
-$FE show $TEST_DIR/test.py 2 4
+fe show $TEST_DIR/test.py 2 4
 
 # 预期输出:
 # 2: def hello():
@@ -40,10 +40,10 @@ $FE show $TEST_DIR/test.py 2 4
 
 ```bash
 # 测试: 替换第 3 行
-$FE replace $TEST_DIR/test.py 3 3 '    print("replaced")\n'
+fe replace $TEST_DIR/test.py 3 3 '    print("replaced")\n'
 
 # 验证
-$FE show $TEST_DIR/test.py 2 4
+fe show $TEST_DIR/test.py 2 4
 
 # 预期: 第 3 行变为 print("replaced")
 ```
@@ -63,10 +63,10 @@ def hello():
 EOF
 
 # 测试: 在第 2 行后插入
-$FE insert $TEST_DIR/test.py 2 '    """docstring"""\n'
+fe insert $TEST_DIR/test.py 2 '    """docstring"""\n'
 
 # 验证
-$FE show $TEST_DIR/test.py 1 5
+fe show $TEST_DIR/test.py 1 5
 
 # 预期: 第 3 行是 """docstring"""
 ```
@@ -75,10 +75,10 @@ $FE show $TEST_DIR/test.py 1 5
 
 ```bash
 # 测试: LINE=0 在开头插入
-$FE insert $TEST_DIR/test.py 0 '#!/usr/bin/env python3\n'
+fe insert $TEST_DIR/test.py 0 '#!/usr/bin/env python3\n'
 
 # 验证
-$FE show $TEST_DIR/test.py 1 2
+fe show $TEST_DIR/test.py 1 2
 
 # 预期: 第 1 行是 shebang
 ```
@@ -100,7 +100,7 @@ line5
 EOF
 
 # 测试: 删除 2-4 行
-$FE delete $TEST_DIR/test.py 2 4
+fe delete $TEST_DIR/test.py 2 4
 
 # 验证
 cat $TEST_DIR/test.py
@@ -130,7 +130,7 @@ def c():
 EOF
 
 # 测试: 多处编辑
-$FE batch --stdin << 'EOF'
+fe batch --stdin << 'EOF'
 {
   "file": "/tmp/fast-edit-test/test.py",
   "edits": [
@@ -155,7 +155,7 @@ cat $TEST_DIR/test.py
 
 ```bash
 # 测试: 保存内容到文件
-echo 'print("hello from stdin")' | $FE paste $TEST_DIR/from_stdin.py --stdin
+echo 'print("hello from stdin")' | fe paste $TEST_DIR/from_stdin.py --stdin
 
 # 验证
 cat $TEST_DIR/from_stdin.py
@@ -171,7 +171,7 @@ cat $TEST_DIR/from_stdin.py
 
 ```bash
 # 测试: 提取 markdown 代码块
-$FE paste $TEST_DIR/extracted.py --stdin --extract << 'EOF'
+fe paste $TEST_DIR/extracted.py --stdin --extract << 'EOF'
 这是一些说明文字
 
 ```python
@@ -196,7 +196,7 @@ cat $TEST_DIR/extracted.py
 
 ```bash
 # 测试: 一次写入多个文件
-$FE write --stdin << 'EOF'
+fe write --stdin << 'EOF'
 {
   "files": [
     {"file": "/tmp/fast-edit-test/multi_a.py", "content": "def a(): pass\n"},
@@ -227,7 +227,7 @@ def add(a: int, b: int) -> int:
     return a + b
 EOF
 
-$FE check $TEST_DIR/good.py
+fe check $TEST_DIR/good.py
 echo "Exit code: $?"
 
 # 预期: 无输出，退出码 0
@@ -242,7 +242,7 @@ def add(a: int, b: int) -> int:
     return "not an int"
 EOF
 
-$FE check $TEST_DIR/bad.py
+fe check $TEST_DIR/bad.py
 echo "Exit code: $?"
 
 # 预期: 报告类型错误，退出码 1
@@ -259,7 +259,7 @@ echo "Exit code: $?"
 # 原始内容: print('hello $USER')
 # base64 编码: cHJpbnQoJ2hlbGxvICRVU0VSJyk=
 
-echo 'cHJpbnQoJ2hlbGxvICRVU0VSJyk=' | $FE paste $TEST_DIR/b64_test.py --stdin --base64
+echo 'cHJpbnQoJ2hlbGxvICRVU0VSJyk=' | fe paste $TEST_DIR/b64_test.py --stdin --base64
 
 # 验证
 cat $TEST_DIR/b64_test.py
@@ -276,7 +276,7 @@ cat $TEST_DIR/b64_test.py
 #     return "bar"
 # base64: ZGVmIGZvbygpOgogICAgcmV0dXJuICJiYXIiCg==
 
-echo 'ZGVmIGZvbygpOgogICAgcmV0dXJuICJiYXIiCg==' | $FE paste $TEST_DIR/b64_multiline.py --stdin --base64
+echo 'ZGVmIGZvbygpOgogICAgcmV0dXJuICJiYXIiCg==' | fe paste $TEST_DIR/b64_multiline.py --stdin --base64
 
 # 验证
 cat $TEST_DIR/b64_multiline.py
@@ -292,7 +292,7 @@ cat $TEST_DIR/b64_multiline.py
 
 ```bash
 # 测试: 批量写入，部分文件用 base64
-$FE write --stdin << 'EOF'
+fe write --stdin << 'EOF'
 {
   "files": [
     {"file": "/tmp/fast-edit-test/w_plain.py", "content": "def plain(): pass\n"},

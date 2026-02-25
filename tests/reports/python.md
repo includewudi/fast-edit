@@ -31,7 +31,7 @@ Python 代码包含以下需要测试的字符：
 
 ### 1. show — 预览 UserService 类
 ```bash
-$FE show app.py 30 57
+fe show app.py 30 57
 ```
 - **结果**: ✅ 正确显示类定义，装饰器 `@staticmethod`、类型注解 `-> List[Dict]`、f-string 完整
 
@@ -61,7 +61,7 @@ spec = {
     ]
 }
 json.dump(spec, sys.stdout)
-" | python3 $FE fast-batch --stdin
+" | fe fast-batch --stdin
 ```
 - **结果**: ✅ 三个编辑全部正确应用
   - docstring 修改：三引号完整保留
@@ -70,13 +70,13 @@ json.dump(spec, sys.stdout)
 
 ### 3. show — 验证编辑后的 update 方法
 ```bash
-$FE show app.py 58 67
+fe show app.py 58 67
 ```
 - **结果**: ✅ 方法代码完整，缩进正确（4空格），f-string 花括号未被破坏
 
 ### 4. verify — 对比编辑前后差异
 ```bash
-$FE verify app.py
+fe verify app.py
 ```
 - **结果**: ✅ 返回 3 个 change hunk
   - hunk 1: docstring 修改（第 1 行）
@@ -86,7 +86,7 @@ $FE verify app.py
 
 ### 5. verify-syntax — Python 语法检查
 ```bash
-$FE verify-syntax app.py
+fe verify-syntax app.py
 ```
 - **结果**: ✅ `"checker": "py_compile"`, `"syntax_valid": true`
 - **说明**: py_compile 检查语法正确性（非类型检查）

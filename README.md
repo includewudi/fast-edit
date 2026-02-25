@@ -56,32 +56,32 @@ pip install mypy
 ## Quick Start
 
 ```bash
-# Set alias for convenience
-export FE="python3 /path/to/fast-edit/fast_edit.py"
+# Define function for convenience
+fe() { python3 "/path/to/fast-edit/fast_edit.py" "$@"; }
 
 # Show lines 1-10
-$FE show myfile.py 1 10
+fe show myfile.py 1 10
 
 # Replace lines 5-7
-$FE replace myfile.py 5 7 "new content\n"
+fe replace myfile.py 5 7 "new content\n"
 
 # Insert after line 3
-$FE insert myfile.py 3 "inserted line\n"
+fe insert myfile.py 3 "inserted line\n"
 
 # Delete lines 8-10
-$FE delete myfile.py 8 10
+fe delete myfile.py 8 10
 
 # Batch edit
-$FE batch edit_spec.json
+fe batch edit_spec.json
 
 # Paste from stdin
-echo "print('hello')" | $FE paste output.py --stdin
+echo "print('hello')" | fe paste output.py --stdin
 
 # Write multiple files
-$FE write files_spec.json
+fe write files_spec.json
 
 # Type check
-$FE check myfile.py
+fe check myfile.py
 ```
 
 ## Commands
@@ -91,7 +91,7 @@ $FE check myfile.py
 Display lines with line numbers.
 
 ```bash
-$FE show script.py 10 20
+fe show script.py 10 20
 ```
 
 ### `replace FILE START END CONTENT`
@@ -99,7 +99,7 @@ $FE show script.py 10 20
 Replace a line range with new content.
 
 ```bash
-$FE replace script.py 5 7 "def new_function():\n    pass\n"
+fe replace script.py 5 7 "def new_function():\n    pass\n"
 ```
 
 - Line numbers are 1-based and inclusive
@@ -111,7 +111,7 @@ $FE replace script.py 5 7 "def new_function():\n    pass\n"
 Insert content after a specific line.
 
 ```bash
-$FE insert script.py 10 "import logging\n"
+fe insert script.py 10 "import logging\n"
 ```
 
 - Use `LINE=0` to insert at the beginning of the file
@@ -121,7 +121,7 @@ $FE insert script.py 10 "import logging\n"
 Delete a line range.
 
 ```bash
-$FE delete script.py 15 20
+fe delete script.py 15 20
 ```
 
 ### `batch [--stdin] [SPEC]`
@@ -130,10 +130,10 @@ Apply multiple edits in a single operation.
 
 ```bash
 # From JSON file
-$FE batch edits.json
+fe batch edits.json
 
 # From stdin
-echo '{"file":"a.py","edits":[...]}' | $FE batch --stdin
+echo '{"file":"a.py","edits":[...]}' | fe batch --stdin
 ```
 
 **Batch JSON format:**
@@ -185,13 +185,13 @@ Save content to a file from clipboard or stdin.
 
 ```bash
 # From clipboard (requires pbpaste on macOS, xclip on Linux)
-$FE paste output.py
+fe paste output.py
 
 # From stdin
-echo "print('hello')" | $FE paste output.py --stdin
+echo "print('hello')" | fe paste output.py --stdin
 
 # Extract markdown code block
-$FE paste output.py --stdin --extract << 'EOF'
+fe paste output.py --stdin --extract << 'EOF'
 Here's some code:
 ```python
 def hello():
@@ -200,7 +200,7 @@ def hello():
 EOF
 
 # Decode base64 content (useful for special characters)
-echo "cHJpbnQoJ2hlbGxvJyk=" | $FE paste output.py --stdin --base64
+echo "cHJpbnQoJ2hlbGxvJyk=" | fe paste output.py --stdin --base64
 ```
 
 - `--extract`: Automatically extract content from ````python`...```` code blocks
@@ -212,10 +212,10 @@ Create multiple files from a JSON specification.
 
 ```bash
 # From JSON file
-$FE write files.json
+fe write files.json
 
 # From stdin
-$FE write --stdin << 'EOF'
+fe write --stdin << 'EOF'
 {
   "files": [
     {
@@ -250,10 +250,10 @@ Run type checker on a Python file.
 
 ```bash
 # Auto-detect available checker
-$FE check myfile.py
+fe check myfile.py
 
 # Use specific checker
-$FE check myfile.py --checker mypy
+fe check myfile.py --checker mypy
 ```
 
 Auto-detection order: `basedpyright` → `pyright` → `mypy`
@@ -282,7 +282,7 @@ def main():
 ```
 
 AI executes:
-echo '<user content>' | $FE paste /tmp/app.py --stdin --extract
+echo '<user content>' | fe paste /tmp/app.py --stdin --extract
 ```
 
 ### User pastes code with special characters (recommended)
@@ -292,7 +292,7 @@ When code contains quotes, `$variables`, backslashes, etc., use base64 to avoid 
 ```bash
 # User pastes: print('hello $USER')
 # AI base64-encodes first, then passes to fast-edit
-echo -n "print('hello \$USER')" | base64 | xargs -I{} sh -c 'echo {} | $FE paste /tmp/app.py --stdin --base64'
+echo -n "print('hello \$USER')" | base64 | xargs -I{} sh -c 'echo {} | fe paste /tmp/app.py --stdin --base64'
 ```
 
 ### User pastes multiple code blocks
@@ -309,7 +309,7 @@ def b(): pass
 ```
 
 AI constructs and executes:
-$FE write --stdin << 'EOF'
+fe write --stdin << 'EOF'
 {"files": [
   {"file": "file1.py", "content": "def a(): pass\n"},
   {"file": "file2.py", "content": "def b(): pass\n"}
@@ -350,7 +350,7 @@ Run the test plan:
 cat TEST_PLAN.md
 
 # Run tests manually
-FE="python3 /path/to/fast-edit/fast_edit.py"
+fe() { python3 "/path/to/fast-edit/fast_edit.py" "$@"; }
 TEST_DIR="/tmp/fast-edit-test"
 mkdir -p $TEST_DIR
 
@@ -364,13 +364,13 @@ mkdir -p $TEST_DIR
 **Alternative**: If LSP is not available, use fast-edit's built-in check command:
 
 ```bash
-$FE check /path/to/edited_file.py
+fe check /path/to/edited_file.py
 ```
 
 | Method | Pros | Cons |
 |--------|------|------|
 | `lsp_diagnostics` | Fast (LSP warm start), supports all languages | Requires LSP server running |
-| `$FE check` | Standalone, no dependencies | Python only, cold startup slower |
+| `fe check` | Standalone, no dependencies | Python only, cold startup slower |
 
 ## License
 

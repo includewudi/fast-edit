@@ -17,7 +17,7 @@
 一条命令，零 token 输出：
 
 ```bash
-$FE save-pasted /tmp/big_file.php
+fe save-pasted /tmp/big_file.php
 ```
 
 就这么简单。
@@ -28,19 +28,19 @@ $FE save-pasted /tmp/big_file.php
 
 ```bash
 # 自动找最近的大粘贴（默认 ≥20 行）
-$FE save-pasted /tmp/output.py
+fe save-pasted /tmp/output.py
 
 # 自定义行数阈值
-$FE save-pasted /tmp/output.py --min-lines 50
+fe save-pasted /tmp/output.py --min-lines 50
 
 # 指定消息 ID
-$FE save-pasted /tmp/output.py --msg-id msg_xxx
+fe save-pasted /tmp/output.py --msg-id msg_xxx
 
 # 提取代码块
-$FE save-pasted /tmp/output.py --extract
+fe save-pasted /tmp/output.py --extract
 
 # 第 2 个最近的大粘贴
-$FE save-pasted /tmp/output.py --nth 2
+fe save-pasted /tmp/output.py --nth 2
 ```
 
 ### 实测对比

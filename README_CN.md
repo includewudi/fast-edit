@@ -56,32 +56,32 @@ pip install mypy
 ## 快速开始
 
 ```bash
-# 设置别名方便使用
-export FE="python3 /path/to/fast-edit/fast_edit.py"
+# 定义函数方便使用
+fe() { python3 "/path/to/fast-edit/fast_edit.py" "$@"; }
 
 # 显示第 1-10 行
-$FE show myfile.py 1 10
+fe show myfile.py 1 10
 
 # 替换第 5-7 行
-$FE replace myfile.py 5 7 "new content\n"
+fe replace myfile.py 5 7 "new content\n"
 
 # 在第 3 行后插入
-$FE insert myfile.py 3 "inserted line\n"
+fe insert myfile.py 3 "inserted line\n"
 
 # 删除第 8-10 行
-$FE delete myfile.py 8 10
+fe delete myfile.py 8 10
 
 # 批量编辑
-$FE batch edit_spec.json
+fe batch edit_spec.json
 
 # 从 stdin 粘贴
-echo "print('hello')" | $FE paste output.py --stdin
+echo "print('hello')" | fe paste output.py --stdin
 
 # 写入多个文件
-$FE write files_spec.json
+fe write files_spec.json
 
 # 类型检查
-$FE check myfile.py
+fe check myfile.py
 ```
 
 ## 命令详解
@@ -91,7 +91,7 @@ $FE check myfile.py
 显示带行号的文件内容。
 
 ```bash
-$FE show script.py 10 20
+fe show script.py 10 20
 ```
 
 ### `replace FILE START END CONTENT`
@@ -99,7 +99,7 @@ $FE show script.py 10 20
 替换指定行范围的内容。
 
 ```bash
-$FE replace script.py 5 7 "def new_function():\n    pass\n"
+fe replace script.py 5 7 "def new_function():\n    pass\n"
 ```
 
 - 行号从 1 开始，首尾均包含
@@ -111,7 +111,7 @@ $FE replace script.py 5 7 "def new_function():\n    pass\n"
 在指定行之后插入内容。
 
 ```bash
-$FE insert script.py 10 "import logging\n"
+fe insert script.py 10 "import logging\n"
 ```
 
 - 使用 `LINE=0` 在文件开头插入
@@ -121,7 +121,7 @@ $FE insert script.py 10 "import logging\n"
 删除指定行范围。
 
 ```bash
-$FE delete script.py 15 20
+fe delete script.py 15 20
 ```
 
 ### `batch [--stdin] [SPEC]`
@@ -130,10 +130,10 @@ $FE delete script.py 15 20
 
 ```bash
 # 从 JSON 文件
-$FE batch edits.json
+fe batch edits.json
 
 # 从 stdin
-echo '{"file":"a.py","edits":[...]}' | $FE batch --stdin
+echo '{"file":"a.py","edits":[...]}' | fe batch --stdin
 ```
 
 **批量编辑 JSON 格式：**
@@ -185,13 +185,13 @@ echo '{"file":"a.py","edits":[...]}' | $FE batch --stdin
 
 ```bash
 # 从剪贴板（macOS 需要 pbpaste，Linux 需要 xclip）
-$FE paste output.py
+fe paste output.py
 
 # 从 stdin
-echo "print('hello')" | $FE paste output.py --stdin
+echo "print('hello')" | fe paste output.py --stdin
 
 # 提取 Markdown 代码块
-$FE paste output.py --stdin --extract << 'EOF'
+fe paste output.py --stdin --extract << 'EOF'
 这是一些代码：
 ```python
 def hello():
@@ -200,7 +200,7 @@ def hello():
 EOF
 
 # 解码 Base64 内容（适用于特殊字符）
-echo "cHJpbnQoJ2hlbGxvJyk=" | $FE paste output.py --stdin --base64
+echo "cHJpbnQoJ2hlbGxvJyk=" | fe paste output.py --stdin --base64
 ```
 
 - `--extract`：自动从 ````python`...```` 代码块中提取内容
@@ -212,10 +212,10 @@ echo "cHJpbnQoJ2hlbGxvJyk=" | $FE paste output.py --stdin --base64
 
 ```bash
 # 从 JSON 文件
-$FE write files.json
+fe write files.json
 
 # 从 stdin
-$FE write --stdin << 'EOF'
+fe write --stdin << 'EOF'
 {
   "files": [
     {
@@ -250,10 +250,10 @@ EOF
 
 ```bash
 # 自动检测可用的检查器
-$FE check myfile.py
+fe check myfile.py
 
 # 使用指定检查器
-$FE check myfile.py --checker mypy
+fe check myfile.py --checker mypy
 ```
 
 自动检测顺序：`basedpyright` → `pyright` → `mypy`
@@ -282,7 +282,7 @@ def main():
 ```
 
 AI 执行：
-echo '<user content>' | $FE paste /tmp/app.py --stdin --extract
+echo '<user content>' | fe paste /tmp/app.py --stdin --extract
 ```
 
 ### 用户粘贴含特殊字符的代码（推荐方式）
@@ -292,7 +292,7 @@ echo '<user content>' | $FE paste /tmp/app.py --stdin --extract
 ```bash
 # 用户粘贴：print('hello $USER')
 # AI 先进行 Base64 编码，再传给 fast-edit
-echo -n "print('hello \$USER')" | base64 | xargs -I{} sh -c 'echo {} | $FE paste /tmp/app.py --stdin --base64'
+echo -n "print('hello \$USER')" | base64 | xargs -I{} sh -c 'echo {} | fe paste /tmp/app.py --stdin --base64'
 ```
 
 ### 用户粘贴多个代码块
@@ -309,7 +309,7 @@ def b(): pass
 ```
 
 AI 构造并执行：
-$FE write --stdin << 'EOF'
+fe write --stdin << 'EOF'
 {"files": [
   {"file": "file1.py", "content": "def a(): pass\n"},
   {"file": "file2.py", "content": "def b(): pass\n"}
@@ -350,7 +350,7 @@ fast-edit/
 cat TEST_PLAN.md
 
 # 手动运行测试
-FE="python3 /path/to/fast-edit/fast_edit.py"
+fe() { python3 "/path/to/fast-edit/fast_edit.py" "$@"; }
 TEST_DIR="/tmp/fast-edit-test"
 mkdir -p $TEST_DIR
 
@@ -364,13 +364,13 @@ mkdir -p $TEST_DIR
 **备选**：如果 LSP 不可用，使用 fast-edit 内置的 check 命令：
 
 ```bash
-$FE check /path/to/edited_file.py
+fe check /path/to/edited_file.py
 ```
 
 | 方法 | 优点 | 缺点 |
 |------|------|------|
 | `lsp_diagnostics` | 快速（LSP 热启动），支持所有语言 | 需要 LSP 服务器运行 |
-| `$FE check` | 独立运行，无依赖 | 仅支持 Python，冷启动较慢 |
+| `fe check` | 独立运行，无依赖 | 仅支持 Python，冷启动较慢 |
 
 ## 许可证
 

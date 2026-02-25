@@ -29,34 +29,34 @@ Go 代码包含以下需要特殊处理的字符：
 
 ### 1. show — 预览 struct 定义
 ```bash
-$FE show server.go 11 16
+fe show server.go 11 16
 ```
 - **结果**: ✅ 正确显示 User struct，反引号 tag 完整
 - **验证**: `json:"id"`, `json:"name"` 等 tag 未被 shell 解释
 
 ### 2. show — 预览 import 块
 ```bash
-$FE show server.go 3 9
+fe show server.go 3 9
 ```
 - **结果**: ✅ 正确显示 import 块
 
 ### 3. CLI replace — 简单替换（无特殊字符）
 ```bash
-$FE replace server.go 48 48 '	fmt.Fprintf(w, `{"status":"ok","version":"2.0.0"}`)\n'
+fe replace server.go 48 48 '	fmt.Fprintf(w, `{"status":"ok","version":"2.0.0"}`)\n'
 ```
 - **结果**: ✅ 版本号从 1.0.0 改为 2.0.0
 - **说明**: 无 `\n` 字面量冲突，CLI replace 安全
 
 ### 4. CLI replace — 含 `\n` 的代码（⚠️ 已知问题）
 ```bash
-$FE replace server.go 53 53 '		log.Printf("[%s] %s %s\n", r.Method, r.URL.Path, r.RemoteAddr)\n'
+fe replace server.go 53 53 '		log.Printf("[%s] %s %s\n", r.Method, r.URL.Path, r.RemoteAddr)\n'
 ```
 - **结果**: ⚠️ `\n` 被展开为真换行，Go 代码损坏
 - **说明**: 这是 CLI replace 的已知限制，Go 字符串中的 `\n` 会被 fast-edit 的 content 参数展开
 
 ### 5. restore — 回滚损坏的编辑
 ```bash
-$FE restore server.go
+fe restore server.go
 ```
 - **结果**: ✅ 成功回滚到编辑前状态
 - **验证**: restore 返回 `"status": "ok"`，行数恢复
@@ -75,7 +75,7 @@ spec = {
     }]
 }
 json.dump(spec, sys.stdout)
-" | python3 $FE fast-batch --stdin
+" | fe fast-batch --stdin
 ```
 - **结果**: ✅ `\n` 保持为字面量 `\n`，Go 代码正确
 - **关键**: JSON 中 `\\n` → 文件中 `\n`（字面量），不会被展开
@@ -95,7 +95,7 @@ spec = {
     }]
 }
 json.dump(spec, sys.stdout)
-" | python3 $FE fast-batch --stdin
+" | fe fast-batch --stdin
 ```
 - **结果**: ✅ 反引号和 `\t` 缩进均正确保留
 
@@ -125,7 +125,7 @@ spec = {
     ]
 }
 json.dump(spec, sys.stdout)
-" | python3 $FE fast-batch --stdin
+" | fe fast-batch --stdin
 ```
 - **结果**: ✅ 三个编辑全部正确应用
   - insert: writeError 函数正确插入，`\n` 和 `\t` 保持字面量

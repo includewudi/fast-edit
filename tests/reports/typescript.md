@@ -33,7 +33,7 @@ TypeScript/NestJS 代码包含以下需要测试的字符：
 
 ### 1. show — 预览泛型接口
 ```bash
-$FE show UserController.ts 11 22
+fe show UserController.ts 11 22
 ```
 - **结果**: ✅ 正确显示
   - `PaginatedResponse<T>` — 泛型参数 `<T>` 完整
@@ -43,7 +43,7 @@ $FE show UserController.ts 11 22
 
 ### 2. show — 预览装饰器 + 模板字面量
 ```bash
-$FE show UserController.ts 55 63
+fe show UserController.ts 55 63
 ```
 - **结果**: ✅ 正确显示
   - `@Get(':id')` — 路由装饰器完整
@@ -52,7 +52,7 @@ $FE show UserController.ts 55 63
 
 ### 3. batch --stdin — 多编辑（5 个操作）
 ```bash
-python3 -c "json.dump(spec, sys.stdout)" | python3 $FE fast-batch --stdin
+python3 -c "json.dump(spec, sys.stdout)" | fe fast-batch --stdin
 ```
 编辑内容：
 1. 插入 `import { Logger }` 
@@ -66,7 +66,7 @@ python3 -c "json.dump(spec, sys.stdout)" | python3 $FE fast-batch --stdin
 
 ### 4. verify — 对比差异
 ```bash
-$FE verify UserController.ts
+fe verify UserController.ts
 ```
 - **结果**: ✅ 5 个 change hunk
   - hunk 1: +1 行 import
@@ -76,15 +76,15 @@ $FE verify UserController.ts
 
 ### 5. show — 验证编辑后模板字面量保持
 ```bash
-$FE show UserController.ts 78 79  # Created user ${user.id}
-$FE show UserController.ts 93 94  # Updated user ${user.id}
-$FE show UserController.ts 105 106 # Deleted user ${deleted.id}
+fe show UserController.ts 78 79  # Created user ${user.id}
+fe show UserController.ts 93 94  # Updated user ${user.id}
+fe show UserController.ts 105 106 # Deleted user ${deleted.id}
 ```
 - **结果**: ✅ 所有 `${}` 表达式完整保留
 
 ### 6. verify-syntax — tsc 检查
 ```bash
-$FE verify-syntax UserController.ts
+fe verify-syntax UserController.ts
 ```
 - **结果**: ⚠️ `"checker": "tsc"`, `"syntax_valid": false`
 - **错误**: `Cannot find module '@nestjs/common'`, `Decorators are not valid here`, `--lib ES2015` needed

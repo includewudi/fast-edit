@@ -10,48 +10,48 @@ description: 大文件编辑、批量修改、剪贴板/stdin粘贴、多文件�
 ## 命令速查
 
 ```bash
-# 直接调用（推荐，兼容所有 shell）
-FE=python3 /path/to/fast-edit/fast_edit.py
+# ⚠️ 优先用函数封装（FE=... 变量在 zsh 下 $FE 只展开第一个词，会导致 command not found）
+fe() { python3 "/path/to/fast-edit/fast_edit.py" "$@"; }
 
 # 所有命令支持 fast-* 前缀避免 shell 内置命令冲突
 # 如: fast-write, fast-paste, fast-batch, fast-verify
 
 # ── 编辑命令 ──
-$FE show FILE START END                # 预览行
-$FE replace FILE START END "content\n" # 替换行
-$FE insert FILE LINE "content\n"       # 插入（LINE=0 表示开头）
-$FE delete FILE START END              # 删除行
+fe show FILE START END                # 预览行
+fe replace FILE START END "content\n" # 替换行
+fe insert FILE LINE "content\n"       # 插入（LINE=0 表示开头）
+fe delete FILE START END              # 删除行
 
 # ── 批量编辑 (JSON) ──
-$FE fast-batch spec.json
-echo '{"file":"a.py","edits":[...]}' | $FE fast-batch --stdin
+fe fast-batch spec.json
+echo '{"file":"a.py","edits":[...]}' | fe fast-batch --stdin
 
 # ── 粘贴保存 ──
-$FE fast-paste FILE                    # 从剪贴板
-$FE fast-paste FILE --stdin            # 从 stdin
-$FE fast-paste FILE --stdin --extract  # 提取 ```...``` 代码块
-$FE fast-paste FILE --stdin --base64   # stdin 内容是 base64 编码
+fe fast-paste FILE                    # 从剪贴板
+fe fast-paste FILE --stdin            # 从 stdin
+fe fast-paste FILE --stdin --extract  # 提取 ```...``` 代码块
+fe fast-paste FILE --stdin --base64   # stdin 内容是 base64 编码
 
 # ── 批量写文件 ──
-$FE fast-write spec.json
-echo '{"files":[...]}' | $FE fast-write --stdin
+fe fast-write spec.json
+echo '{"files":[...]}' | fe fast-write --stdin
 
 # ── 验证/回滚 ──
-$FE verify FILE                        # 对比当前文件与备份的差异
-$FE verify FILE --context 3            # 显示更多上下文行
-$FE restore FILE                       # 回滚到最近备份
-$FE backups FILE                       # 列出所有备份
-$FE verify-syntax FILE                 # 语言感知语法检查
+fe verify FILE                        # 对比当前文件与备份的差异
+fe verify FILE --context 3            # 显示更多上下文行
+fe restore FILE                       # 回滚到最近备份
+fe backups FILE                       # 列出所有备份
+fe verify-syntax FILE                 # 语言感知语法检查
 
 # ── 其他 ──
-$FE check FILE                         # Python 类型检查
-$FE check FILE --checker mypy
-$FE save-pasted FILE                   # 自动找最近的大粘贴 (>=20行)
-$FE save-pasted FILE --min-lines 50    # 自定义行数阈值
-$FE save-pasted FILE --msg-id msg_xxx  # 指定消息 ID
-$FE save-pasted FILE --extract         # 提取 ```...``` 代码块
-$FE save-pasted FILE --nth 2           # 第2个最近的大粘贴
-$FE help
+fe check FILE                         # Python 类型检查
+fe check FILE --checker mypy
+fe save-pasted FILE                   # 自动找最近的大粘贴 (>=20行)
+fe save-pasted FILE --min-lines 50    # 自定义行数阈值
+fe save-pasted FILE --msg-id msg_xxx  # 指定消息 ID
+fe save-pasted FILE --extract         # 提取 ```...``` 代码块
+fe save-pasted FILE --nth 2           # 第2个最近的大粘贴
+fe help
 ```
 
 ## 使用场景
@@ -67,7 +67,7 @@ $FE help
   │    150+ 行时强烈推荐（echo/heredoc 可能截断）
   │
   ├─ 降级: paste FILE --stdin (< 150 行、save-pasted 失败时)
-  │    echo '内容' | $FE paste FILE --stdin
+  │    echo '内容' | fe paste FILE --stdin
   │
   └─ 特殊字符多: paste FILE --stdin --base64
        含 $、反引号、引号嵌套时用 base64 编码
@@ -93,22 +93,22 @@ $FE help
 
 ```bash
 # 1. 编辑文件
-$FE replace /path/to/file.go 10 15 "new code\n"
+fe replace /path/to/file.go 10 15 "new code\n"
 
 # 2. 验证：对比编辑前后的差异
-$FE verify /path/to/file.go
+fe verify /path/to/file.go
 # 返回 JSON：status, result("changed"/"identical"), added/removed 行数, 具体 diff
 
 # 3. 如果改坏了 → 回滚
-$FE restore /path/to/file.go
+fe restore /path/to/file.go
 # 回滚前会保存当前状态（forward backup），所以不会丢失
 
 # 4. 语法检查（支持 Go/Python/Rust/C/C++/Java/TypeScript/JavaScript）
-$FE verify-syntax /path/to/file.go
+fe verify-syntax /path/to/file.go
 # 返回 JSON：syntax_valid (true/false), checker ("go vet"/"py_compile"/...), output
 
 # 5. 查看所有备份历史
-$FE backups /path/to/file.go
+fe backups /path/to/file.go
 ```
 
 **验证命令返回格式：**
@@ -202,8 +202,8 @@ spec = {
     }]
 }
 json.dump(spec, sys.stdout)
-" | $FE fast-batch --stdin
-$FE replace file.go 10 12 'fmt.Printf("hello %s\n", name)\n'
+" | fe fast-batch --stdin
+fe replace file.go 10 12 'fmt.Printf("hello %s\n", name)\n'
 ```
 
 | 场景 | 推荐 |
@@ -238,7 +238,7 @@ spec = {
     }]
 }
 json.dump(spec, sys.stdout)
-" | $FE fast-batch --stdin
+" | fe fast-batch --stdin
 ```
 
 | 场景 | 推荐 |
@@ -300,15 +300,15 @@ json.dump(spec, sys.stdout)
   \n  \t  $  `  <>  |  \(PHP命名空间)  """(三引号)
 
 安全管道模式:
-  python3 -c "import json,sys; json.dump(spec,sys.stdout)" | $FE fast-batch --stdin
+  python3 -c "import json,sys; json.dump(spec,sys.stdout)" | fe fast-batch --stdin
 
 编辑前:
-  $FE show FILE START END  # 确认行号再编辑
+  fe show FILE START END  # 确认行号再编辑
 
 编辑后:
-  $FE verify FILE           # 检查 diff
+  fe verify FILE           # 检查 diff
   lsp_diagnostics(file)      # 类型检查（首选）
-  $FE verify-syntax FILE     # 语法检查（备选，参考信号）
+  fe verify-syntax FILE     # 语法检查（备选，参考信号）
 ```
 
 ## Batch JSON 格式
@@ -389,10 +389,10 @@ def main():
 
 AI 执行:
 # 首选: 直接从本地存储提取（零 token）
-$FE save-pasted /tmp/app.py --extract
+fe save-pasted /tmp/app.py --extract
 
 # 降级: save-pasted 失败时
-echo '<用户粘贴的内容>' | $FE paste /tmp/app.py --stdin --extract
+echo '<用户粘贴的内容>' | fe paste /tmp/app.py --stdin --extract
 ```
 
 ### 用户粘贴含特殊字符的代码 (推荐)
@@ -401,7 +401,7 @@ echo '<用户粘贴的内容>' | $FE paste /tmp/app.py --stdin --extract
 
 ```bash
 printf '%s' "print('hello \$USER')" | base64 > /tmp/b64.txt
-cat /tmp/b64.txt | $FE paste /tmp/app.py --stdin --base64
+cat /tmp/b64.txt | fe paste /tmp/app.py --stdin --base64
 ```
 
 ### 用户粘贴代码保存文件（首选 save-pasted）
@@ -410,13 +410,13 @@ cat /tmp/b64.txt | $FE paste /tmp/app.py --stdin --base64
 > 150+ 行时强烈推荐 — echo/heredoc 可能截断。
 ```bash
 # 直接从 OpenCode 的本地存储提取，零 token 输出
-$FE save-pasted /tmp/app.py
+fe save-pasted /tmp/app.py
 
 # 提取 ```...``` 代码块
-$FE save-pasted /tmp/app.py --extract
+fe save-pasted /tmp/app.py --extract
 # 然后正常编辑
-$FE show /tmp/app.py 1 20
-$FE replace /tmp/app.py 10 12 "new content\n"
+fe show /tmp/app.py 1 20
+fe replace /tmp/app.py 10 12 "new content\n"
 ```
 原理：用户粘贴的内容已存储在 `~/.local/share/opencode/storage/part/`，
 `save-pasted` 直接读取文件系统，不需要 AI 重新输出。
@@ -450,7 +450,7 @@ $FE replace /tmp/app.py 10 12 "new content\n"
 用分段 heredoc + `cat` 合并 + `paste --stdin` 逐步累积：
 
 ```bash
-FE=(python3 /path/to/fast-edit/fast_edit.py)
+fe() { python3 "/path/to/fast-edit/fast_edit.py" "$@"; }
 # 第 1 段 (~120 行)
 cat > /tmp/part1.md << 'PART1'
 ...first ~120 lines...
@@ -463,7 +463,7 @@ PART2
 
 # 合并 → 写入目标
 cat /tmp/part1.md /tmp/part2.md > /tmp/combined.md
-$FE paste /path/to/target.md --stdin < /tmp/combined.md
+fe paste /path/to/target.md --stdin < /tmp/combined.md
 
 # 清理
 rm -f /tmp/part*.md /tmp/combined*.md
@@ -490,7 +490,7 @@ def b(): pass
 ```
 
 AI 构造 JSON 执行:
-$FE write --stdin << 'EOF'
+fe write --stdin << 'EOF'
 {"files": [
   {"file": "file1.py", "content": "def a(): pass\n"},
   {"file": "file2.py", "content": "def b(): pass\n"}
@@ -533,6 +533,6 @@ lsp_diagnostics(filePath="/path/to/edited_file.py")
 | 方式 | 优点 | 缺点 |
 |------|------|------|
 | `lsp_diagnostics` | 快（LSP 热启动）、支持所有语言 | 需要 LSP 服务运行 |
-| `$FE verify-syntax` | 多语言语法检查（Go/Py/Rust/C/TS/Java） | 仅检查语法，不检查类型 |
-| `$FE verify` | 查看编辑前后差异，确认改对了 | 需要先有备份 |
-| `$FE check` | Python 类型检查 | 仅支持 Python |
+| `fe verify-syntax` | 多语言语法检查（Go/Py/Rust/C/TS/Java） | 仅检查语法，不检查类型 |
+| `fe verify` | 查看编辑前后差异，确认改对了 | 需要先有备份 |
+| `fe check` | Python 类型检查 | 仅支持 Python |

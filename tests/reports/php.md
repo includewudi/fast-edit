@@ -34,7 +34,7 @@ PHP 代码包含以下需要测试的字符：
 
 ### 1. show — 预览 index 方法
 ```bash
-$FE show UserController.php 21 50
+fe show UserController.php 21 50
 ```
 - **结果**: ✅ 正确显示
   - `$request->input('role')` — `$` 变量完整
@@ -67,7 +67,7 @@ spec = {
     ]
 }
 json.dump(spec, sys.stdout)
-" | python3 $FE fast-batch --stdin
+" | fe fast-batch --stdin
 ```
 - **结果**: ✅ 三个编辑全部正确应用
   - `use Illuminate\Support\Facades\Cache;` — 命名空间反斜杠正确
@@ -76,7 +76,7 @@ json.dump(spec, sys.stdout)
 
 ### 3. show — 验证 Cache::remember 代码
 ```bash
-$FE show UserController.php 37 41
+fe show UserController.php 37 41
 ```
 - **结果**: ✅ 缓存代码完整
   - `$cacheKey` 变量前缀 `$` 正确
@@ -85,7 +85,7 @@ $FE show UserController.php 37 41
 
 ### 4. verify — 对比编辑前后差异
 ```bash
-$FE verify UserController.php
+fe verify UserController.php
 ```
 - **结果**: ✅ 返回 3 个 change hunk
   - hunk 1: `use Cache` import 插入
@@ -95,7 +95,7 @@ $FE verify UserController.php
 
 ### 5. verify-syntax — PHP 语法检查
 ```bash
-$FE verify-syntax UserController.php
+fe verify-syntax UserController.php
 ```
 - **结果**: ⚠️ `"checker": "none"`, `"message": "No syntax checker for .php files"`
 - **说明**: verify.py 未实现 PHP 语法检查器

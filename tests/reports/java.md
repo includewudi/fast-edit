@@ -33,7 +33,7 @@ Java 代码包含以下需要测试的字符：
 
 ### 1. show — 预览注解 + 泛型
 ```bash
-$FE show UserController.java 13 26
+fe show UserController.java 13 26
 ```
 - **结果**: ✅ 正确显示
   - `@RestController` / `@RequestMapping("/api/users")` — 注解完整
@@ -42,7 +42,7 @@ $FE show UserController.java 13 26
 
 ### 2. show — 预览 switch 表达式
 ```bash
-$FE show UserController.java 89 97
+fe show UserController.java 89 97
 ```
 - **结果**: ✅ Java 14+ `case "name" -> user.setName(value)` 语法完整
 
@@ -55,14 +55,14 @@ $FE show UserController.java 89 97
 
 ### 5. restore — 回滚错误编辑
 ```bash
-$FE restore UserController.java
+fe restore UserController.java
 ```
 - **结果**: ✅ 成功回滚到原始状态
 
 ### 6-7. show — 精确定位目标行
 ```bash
-$FE show UserController.java 96 96   # → System.out.printf("Updated...")
-$FE show UserController.java 109 109 # → System.out.printf("Deleted...")
+fe show UserController.java 96 96   # → System.out.printf("Updated...")
+fe show UserController.java 109 109 # → System.out.printf("Deleted...")
 ```
 - **结果**: ✅ 确认正确行号：69, 96, 109
 
@@ -81,7 +81,7 @@ spec = {
     ]
 }
 json.dump(spec, sys.stdout)
-" | python3 $FE fast-batch --stdin
+" | fe fast-batch --stdin
 ```
 - **结果**: ✅ 5 个编辑全部正确
   - import 添加：`org.slf4j.Logger` + `LoggerFactory` 正确
@@ -90,7 +90,7 @@ json.dump(spec, sys.stdout)
 
 ### 9. verify — 对比差异
 ```bash
-$FE verify UserController.java
+fe verify UserController.java
 ```
 - **结果**: ✅ 5 个 change hunk 全部正确
   - hunk 1: +2 行 import
@@ -99,7 +99,7 @@ $FE verify UserController.java
 
 ### 10. verify-syntax — javac 检查
 ```bash
-$FE verify-syntax UserController.java
+fe verify-syntax UserController.java
 ```
 - **结果**: ⚠️ `"checker": "javac"`, `"syntax_valid": false`
 - **输出**: `"Unable to locate a Java Runtime"`

@@ -36,7 +36,7 @@ React JSX 代码包含以下需要测试的字符：
 
 ### 1. show — 预览 JSX 表达式 + 动态类名
 ```bash
-$FE show UserList.jsx 91 108
+fe show UserList.jsx 91 108
 ```
 - **结果**: ✅ 正确显示
   - `` className={`user-card ${user.role}`} `` — 模板字面量类名完整
@@ -47,7 +47,7 @@ $FE show UserList.jsx 91 108
 
 ### 2. show — 预览模板字面量 + 错误处理
 ```bash
-$FE show UserList.jsx 27 30
+fe show UserList.jsx 27 30
 ```
 - **结果**: ✅ `` `HTTP ${res.status}: ${res.statusText}` `` 完整
 
@@ -65,7 +65,7 @@ $FE show UserList.jsx 27 30
 
 ### 4. verify — 对比差异
 ```bash
-$FE verify UserList.jsx
+fe verify UserList.jsx
 ```
 - **结果**: ✅ 4 个 change hunk
   - hunk 1: import 修改（+useRef）
@@ -76,13 +76,13 @@ $FE verify UserList.jsx
 
 ### 5. show — 验证模板字面量
 ```bash
-$FE show UserList.jsx 35 37
+fe show UserList.jsx 35 37
 ```
 - **结果**: ✅ `` console.error(`[UserList] Failed to fetch (page=${page}, role=${role}):`, err) `` 模板字面量完整
 
 ### 6. show — 验证 JSX 插入 ⚠️
 ```bash
-$FE show UserList.jsx 81 87
+fe show UserList.jsx 81 87
 ```
 - **结果**: ⚠️ aria-live JSX 块插入位置在 `<input` 标签之后（JSX return 内部），而非作为早期 return 分支
 - **原因**: 行号 79 指向的是 JSX return 内部的 `<header>` 后的 `<input>` 元素，而非函数体
@@ -90,7 +90,7 @@ $FE show UserList.jsx 81 87
 
 ### 7. verify-syntax — node --check
 ```bash
-$FE verify-syntax UserList.jsx
+fe verify-syntax UserList.jsx
 ```
 - **结果**: ⚠️ `"checker": "node"`, `"syntax_valid": false`
 - **错误**: `ERR_UNKNOWN_FILE_EXTENSION: Unknown file extension ".jsx"`

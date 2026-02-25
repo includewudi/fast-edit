@@ -42,26 +42,26 @@ fast_edit - AI file editing tool with line-number addressing
 COMMANDS (all support fast-* prefix, e.g. fast-write, fast-paste):
   show FILE START END
     Show lines with line numbers (1-based, inclusive)
-    Example: $FE show myfile.py 10 20
+    Example: fe show myfile.py 10 20
     Replace line range with new content
-    Example: $FE replace myfile.py 5 7 "new content\\n"
+    Example: fe replace myfile.py 5 7 "new content\\n"
     Insert content after line (LINE=0 for prepend)
-    Example: $FE insert myfile.py 10 "import os\\n"
+    Example: fe insert myfile.py 10 "import os\\n"
     Delete line range
-    Example: $FE delete myfile.py 15 20
+    Example: fe delete myfile.py 15 20
     Batch edit from JSON (multiple edits in one call)
-    Example: $FE fast-batch --stdin <<< '{"file":"a.py","edits":[...]}'
+    Example: fe fast-batch --stdin <<< '{"file":"a.py","edits":[...]}'
   paste FILE [--stdin] [--extract] [--base64]
     Save content from clipboard/stdin to file
-    Example: echo "code" | $FE fast-paste output.py --stdin
+    Example: echo "code" | fe fast-paste output.py --stdin
   write [--stdin] [SPEC]
     Batch write multiple files from JSON
-    Example: $FE fast-write --stdin <<< '{"files":[{"file":"a.py","content":"..."}]}'
+    Example: fe fast-write --stdin <<< '{"files":[{"file":"a.py","content":"..."}]}'
   check FILE [--checker NAME]
     Type check Python file (auto-detect: basedpyright/pyright/mypy)
-    Example: $FE check myfile.py
+    Example: fe check myfile.py
     Save pasted content from OpenCode storage (for large pastes)
-    Example: $FE save-pasted /tmp/file.py
+    Example: fe save-pasted /tmp/file.py
   help
     Show this help message
   - Line numbers are 1-based and inclusive
