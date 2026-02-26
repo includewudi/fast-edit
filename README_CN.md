@@ -32,6 +32,7 @@
 - **多文件写入**：通过单个 JSON 规范创建多个文件
 - **类型检查**：自动检测并运行可用的 Python 类型检查器（basedpyright、pyright、mypy）
 - **零外部依赖**：纯 Python 实现，仅使用标准库
+- **代码生成写文件**：执行代码生成文件内容，批量创建大文件时可实现 5x+ token 压缩
 
 ## 安装
 
@@ -82,6 +83,12 @@ fe write files_spec.json
 
 # 类型检查
 fe check myfile.py
+
+# 代码生成写文件
+echo 'import json; print(json.dumps({"key": "value"}))' | fe generate --stdin -o output.json
+
+# 生成多个文件
+python3 gen_script.py | fe generate --stdin
 ```
 
 ## 命令详解
@@ -258,6 +265,42 @@ fe check myfile.py --checker mypy
 
 自动检测顺序：`basedpyright` → `pyright` → `mypy`
 
+
+### `generate [--stdin] [-o FILE] [SCRIPT] [--timeout N] [--interpreter CMD] [--no-validate]`
+
+执行代码并将 stdout 输出写入文件。解决 AI 批量生成大文件时的输出 token 瓶颈问题。
+
+```bash
+# 单文件模式：代码 stdout → 一个文件
+echo 'import json; print(json.dumps({"data": [1,2,3]}))' | fe generate --stdin -o output.json
+
+# 多文件模式：代码 stdout 必须是 JSON 文件规范
+python3 gen_files.py | fe generate --stdin
+
+# 脚本文件模式
+fe generate script.py -o output.json
+
+# 带选项
+fe generate --stdin -o out.json --timeout 60 --interpreter python3.12 --no-validate
+```
+
+**两种模式：**
+
+1. **单文件** (`-o FILE`)：脚本 stdout 直接写入目标文件
+2. **多文件** (不带 `-o`)：脚本 stdout 必须是 JSON：`{"files": [{"file": "路径", "content": "..."}]}`
+
+**选项：**
+
+| 选项 | 说明 | 默认值 |
+|------|------|--------|
+| `--stdin` | 从 stdin 读取代码 | - |
+| `-o FILE` | 单文件模式输出目标 | 多文件模式 |
+| `--timeout N` | 执行超时（秒） | 30 |
+| `--interpreter CMD` | 执行代码的解释器 | `python3` |
+| `--no-validate` | 跳过 .json 文件的格式验证 | 验证 |
+
+**为什么使用 generate？** 当 AI 需要创建大文件（200+ 行）时，LLM 输出 token 上限成为瓶颈。所有文件写入工具都要求 LLM 输出完整内容。`generate` 让 LLM 输出紧凑的代码（~70 行），由代码在本地执行后生成内容（~375+ 行）—— 实现 5x+ 压缩比。
+
 ## 使用场景
 
 | 场景 | 命令 |
@@ -269,6 +312,7 @@ fe check myfile.py --checker mypy
 | 用户粘贴多个代码块，保存多文件 | `write --stdin` |
 | 从剪贴板保存 | `paste` |
 | 编辑后类型检查 | `check` |
+| AI 从零生成大文件/批量文件 (200+ 行) | `generate --stdin -o FILE` 或 `generate --stdin` |
 
 ## 典型工作流
 
@@ -317,6 +361,26 @@ fe write --stdin << 'EOF'
 EOF
 ```
 
+
+### AI 使用代码生成大文件
+
+当 AI 需要创建 200+ 行的文件时，使用 `generate` 实现 5x+ token 压缩：
+
+```bash
+# AI 写 ~30 行 Python，生成 200+ 行输出
+python3 << 'PYEOF' | fe generate --stdin -o /path/to/config.json
+import json
+
+config = {
+    "items": [
+        {"id": i, "name": f"Item {i}", "settings": {"enabled": True, "priority": i % 3}}
+        for i in range(1, 101)
+    ]
+}
+print(json.dumps(config, indent=2))
+PYEOF
+```
+
 ## 性能对比
 
 | 场景 | Edit 工具 | fast-edit |
@@ -333,12 +397,16 @@ fast-edit/
 ├── core.py        # 文件 I/O 操作
 ├── edit.py        # 编辑操作（show、replace、insert、delete、batch）
 ├── paste.py       # 粘贴/写入操作
+├── pasted.py      # OpenCode 存储提取
+├── generate.py    # 代码生成写文件
 ├── check.py       # 类型检查
+├── verify.py      # 验证/备份/回滚/语法检查
 ├── skill.md       # 详细使用文档
 ├── TEST_PLAN.md   # 测试计划与结果
 ├── requirements.txt  # 可选依赖
 ├── .gitignore
-└── README.md
+├── README.md
+└── README_CN.md
 ```
 
 ## 测试

@@ -10,6 +10,8 @@ Commands:
     batch [--stdin] [SPEC]           Batch edit from JSON
     paste FILE [--stdin] [--extract] [--base64]  Save from clipboard/stdin
     write [--stdin] [SPEC]           Batch write files from JSON
+    generate [--stdin] [SCRIPT] [-o FILE] [--timeout N] [--interpreter CMD]
+                                     Execute code → write output to file(s)
     check FILE [--checker NAME]      Type check Python file
     save-pasted FILE [--min-lines N] [--msg-id ID] [--extract] [--nth N]
     verify FILE [--context N]          Compare file with backup
@@ -33,6 +35,7 @@ import paste
 import pasted
 import check
 import verify
+import generate as gen_mod
 
 
 def print_help():
@@ -57,6 +60,11 @@ COMMANDS (all support fast-* prefix, e.g. fast-write, fast-paste):
   write [--stdin] [SPEC]
     Batch write multiple files from JSON
     Example: fe fast-write --stdin <<< '{"files":[{"file":"a.py","content":"..."}]}'
+  generate [--stdin] [SCRIPT] [-o FILE] [--timeout N] [--interpreter CMD] [--no-validate]
+    Execute code and write stdout to file(s). Solves AI output token bottleneck.
+    Single file: python3 gen.py | fe fast-generate --stdin -o output.json
+    Multi-file:  python3 gen.py | fe fast-generate --stdin  (stdout must be JSON spec)
+    Example: echo 'import json; print(json.dumps({"a":1}))' | fe fast-generate --stdin -o /tmp/a.json
   check FILE [--checker NAME]
     Type check Python file (auto-detect: basedpyright/pyright/mypy)
     Example: fe check myfile.py
@@ -141,6 +149,38 @@ def main():
             else:
                 spec = json.load(open(rest[0]))
             result = paste.write(spec)
+
+        # Generate: execute code → write output to file(s)
+        elif cmd in ("generate", "fast-generate"):
+            timeout_str = get_arg(rest, "--timeout")
+            timeout_val = int(timeout_str) if timeout_str else 30
+            interpreter = get_arg(rest, "--interpreter") or "python3"
+            output_file = get_arg(rest, "-o")
+            no_validate = "--no-validate" in rest
+            if "--stdin" in rest:
+                code = sys.stdin.read()
+                result = gen_mod.generate(
+                    code=code,
+                    output_file=output_file,
+                    interpreter=interpreter,
+                    timeout=timeout_val,
+                    validate_json=not no_validate,
+                )
+            else:
+                # Script file path: first non-flag arg
+                script_args = [x for x in rest if not x.startswith("--") and x != "-o"
+                               and x != output_file and x != timeout_str
+                               and x != interpreter]
+                if not script_args:
+                    result = {"status": "error", "message": "generate requires --stdin or a script path"}
+                else:
+                    result = gen_mod.generate(
+                        script_path=script_args[0],
+                        output_file=output_file,
+                        interpreter=interpreter,
+                        timeout=timeout_val,
+                        validate_json=not no_validate,
+                    )
         
         # Type check
         elif cmd in ("check", "fast-check") and rest:
@@ -183,7 +223,21 @@ def main():
             result = verify.verify_syntax(rest[0])
         
         else:
-            result = {"status": "error", "message": f"Unknown command: {cmd}"}
+            # Check if it's a known command with missing args
+            known = {
+                'show': 'FILE START END', 'replace': 'FILE START END CONTENT',
+                'insert': 'FILE LINE CONTENT', 'delete': 'FILE START END',
+                'batch': '[--stdin] [SPEC]', 'paste': 'FILE [--stdin] [--extract] [--base64]',
+                'write': '[--stdin] [SPEC]', 'generate': '[--stdin] [SCRIPT] [-o FILE]',
+                'check': 'FILE [--checker NAME]', 'save-pasted': 'FILE [--min-lines N]',
+                'verify': 'FILE [--context N]', 'restore': 'FILE', 'backups': 'FILE',
+                'verify-syntax': 'FILE',
+            }
+            base = cmd.removeprefix('fast-')
+            if base in known:
+                result = {'status': 'error', 'message': f'Missing arguments for {cmd}. Usage: {cmd} {known[base]}'}
+            else:
+                result = {'status': 'error', 'message': f'Unknown command: {cmd}'}
         
         print(json.dumps(result, indent=2, ensure_ascii=False))
         

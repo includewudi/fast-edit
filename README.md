@@ -32,6 +32,7 @@ A simple three-location fix shouldn't take 30 seconds. Here's why the built-in E
 - **Multi-file writing**: Create multiple files from a single JSON specification
 - **Type checking**: Auto-detects and runs available Python type checkers (basedpyright, pyright, mypy)
 - **Zero external dependencies**: Pure Python, uses only standard library
+- **Code generation**: Execute code to generate file content, achieving 5x+ token compression for bulk file creation
 
 ## Installation
 
@@ -83,6 +84,12 @@ fe write files_spec.json
 # Type check
 fe check myfile.py
 ```
+
+# Generate file from code
+echo 'import json; print(json.dumps({"key": "value"}))' | fe generate --stdin -o output.json
+
+# Generate multiple files from code
+python3 gen_script.py | fe generate --stdin
 
 ## Commands
 
@@ -258,6 +265,42 @@ fe check myfile.py --checker mypy
 
 Auto-detection order: `basedpyright` → `pyright` → `mypy`
 
+
+### `generate [--stdin] [-o FILE] [SCRIPT] [--timeout N] [--interpreter CMD] [--no-validate]`
+
+Execute code and write stdout output as file content. Solves the AI output token bottleneck for bulk file generation.
+
+```bash
+# Single file: code stdout → one file
+echo 'import json; print(json.dumps({"data": [1,2,3]}))' | fe generate --stdin -o output.json
+
+# Multi-file: code stdout must be JSON spec
+python3 gen_files.py | fe generate --stdin
+
+# Script file mode
+fe generate script.py -o output.json
+
+# With options
+fe generate --stdin -o out.json --timeout 60 --interpreter python3.12 --no-validate
+```
+
+**Two modes:**
+
+1. **Single-file** (`-o FILE`): Script stdout is written directly to the target file
+2. **Multi-file** (no `-o`): Script stdout must be JSON: `{"files": [{"file": "path", "content": "..."}]}`
+
+**Options:**
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--stdin` | Read code from stdin | - |
+| `-o FILE` | Single-file output target | Multi-file mode |
+| `--timeout N` | Execution timeout in seconds | 30 |
+| `--interpreter CMD` | Command to run the code | `python3` |
+| `--no-validate` | Skip JSON validation for .json files | Validate |
+
+**Why use generate?** When AI needs to create large files (200+ lines), the LLM output token limit becomes the bottleneck. All file-writing tools require the LLM to output full content. `generate` lets the LLM write compact code (~70 lines) that *generates* the content (~375+ lines) — a 5x+ compression ratio.
+
 ## Use Cases
 
 | Scenario | Command |
@@ -269,6 +312,7 @@ Auto-detection order: `basedpyright` → `pyright` → `mypy`
 | User pastes multiple code blocks, save multiple files | `write --stdin` |
 | Save from clipboard | `paste` |
 | Type check after editing | `check` |
+| AI generates large/bulk files (200+ lines) | `generate --stdin -o FILE` or `generate --stdin` |
 
 ## Typical Workflows
 
@@ -317,6 +361,25 @@ fe write --stdin << 'EOF'
 EOF
 ```
 
+### AI generates large files using code
+
+When AI needs to create files with 200+ lines, use `generate` to achieve 5x+ token compression:
+
+```bash
+# AI writes ~30 lines of Python, generates 200+ lines of output
+python3 << 'PYEOF' | fe generate --stdin -o /path/to/config.json
+import json
+
+config = {
+    "items": [
+        {"id": i, "name": f"Item {i}", "settings": {"enabled": True, "priority": i % 3}}
+        for i in range(1, 101)
+    ]
+}
+print(json.dumps(config, indent=2))
+PYEOF
+```
+
 ## Performance Comparison
 
 | Scenario | Edit Tool | fast-edit |
@@ -329,16 +392,20 @@ EOF
 
 ```
 fast-edit/
-├── fast_edit.py   # CLI entry point (121 lines)
+├── fast_edit.py   # CLI entry point
 ├── core.py        # File I/O operations
 ├── edit.py        # Edit operations (show, replace, insert, delete, batch)
 ├── paste.py       # Paste/write operations
+├── pasted.py      # OpenCode storage extraction
+├── generate.py    # Code generation → file writing
 ├── check.py       # Type checking
-├── skill.md       # Detailed usage documentation
+├── verify.py      # Verify/backup/restore/syntax check
+├── skill.md       # Detailed usage documentation (Chinese)
 ├── TEST_PLAN.md   # Test plan and results
 ├── requirements.txt  # Optional dependencies
 ├── .gitignore
-└── README.md
+├── README.md
+└── README_CN.md
 ```
 
 ## Testing

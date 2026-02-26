@@ -35,6 +35,14 @@ fe fast-paste FILE --stdin --base64   # stdin 内容是 base64 编码
 # ── 批量写文件 ──
 fe fast-write spec.json
 echo '{"files":[...]}' | fe fast-write --stdin
+# ⚠️ --stdin 管道传 JSON 时，echo 中的 \n 会被 shell 解释为真换行，导致 JSON 无效
+# 推荐用 printf '%s' 或 heredoc << 'EOF' 或 python3 -c "json.dump(...)" 构造 JSON
+# ── 代码生成写文件（推荐用于批量生成 200+ 行） ──
+echo 'python_code' | fe fast-generate --stdin -o output.json   # 单文件
+echo 'python_code' | fe fast-generate --stdin                   # 多文件(stdout=JSON)
+fe fast-generate script.py -o output.json                       # 脚本文件模式
+fe fast-generate script.py -o out.json --timeout 60             # 自定义超时
+fe fast-generate --stdin -o out.json --no-validate              # 跳过 JSON 验证
 
 # ── 验证/回滚 ──
 fe verify FILE                        # 对比当前文件与备份的差异
@@ -52,6 +60,47 @@ fe save-pasted FILE --msg-id msg_xxx  # 指定消息 ID
 fe save-pasted FILE --extract         # 提取 ```...``` 代码块
 fe save-pasted FILE --nth 2           # 第2个最近的大粘贴
 fe help
+```
+## ⚠️ replace 前必须确认行号（强制规则）
+
+> **绝对不要凭记忆 replace。** 行号会因为之前的编辑而偏移，AI 数行号容易 off-by-one。
+
+**必须遵守的流程：**
+
+```
+replace/delete 操作
+  │
+  ├─ 第1步: fe show FILE START END
+  │    确认首行和末行内容是否匹配你要替换的目标
+  │    ⚠️ 重点检查 END 行 — off-by-one 最常发生在末行
+  │
+  ├─ 第2步: 确认行号正确后，再执行 replace
+  │    fe replace FILE START END "content\
+"
+  │
+  └─ 第3步: 检查返回的 warnings 字段
+       如果有 warnings，立即检查并修复
+```
+
+**常见 off-by-one 错误模式：**
+
+| 错误 | 后果 | 预防 |
+|------|------|------|
+| END 少了1行 | 目标的最后一行残留，与新内容重复 | show 确认 END 行内容 |
+| END 多了1行 | 多删了下一行代码 | show 确认 END+1 行不是你要保留的 |
+| START 偏移 | 替换了错误的起始位置 | show 确认 START 行内容 |
+
+**反面案例（导致编译错误）：**
+```bash
+# ❌ 错误：凭记忆 replace，END 少1行
+fe replace file.dart 74 78 "new widget code\
+"
+# 结果：第79行残留了旧代码，与新代码重复 → 编译错误
+
+# ✅ 正确：先 show 确认
+fe show file.dart 74 80    # 看清楚79行是什么
+fe replace file.dart 74 79 "new widget code\
+"  # 确认后再替换
 ```
 
 ## 使用场景
@@ -85,7 +134,8 @@ fe help
 | 编辑改坏了，一键回滚 | `restore` |
 | 编辑后语法检查（多语言） | `verify-syntax` |
 | 编辑后类型检查 | `lsp_diagnostics` (推荐) 或 `check` |
-| AI 从零创建大文件 (200+行) | 分段 heredoc → `cat` 合并 → `paste --stdin` |
+| AI 从零生成大文件/批量文件 (200+行) | **`fast-generate --stdin`** (代码生成，5x+ token 压缩) |
+| AI 从零生成大文件 (备选, 无 Python) | 分段 heredoc → `cat` 合并 → `paste --stdin` |
 
 ## 编辑后验证（推荐工作流）
 
@@ -140,6 +190,41 @@ fe backups /path/to/file.go
   "lines": 100
 }
 ```
+
+## replace/batch 自动 warnings
+
+`replace` 和 `batch`（replace-lines）操作会自动检测常见 AI 编辑错误，在返回 JSON 中附加 `warnings` 字段。
+
+**检测的错误类型：**
+
+| Warning | 含义 | 常见原因 |
+|---------|------|----------|
+| `DUPLICATE_LINE` | 替换内容的最后一行与紧邻的下一行完全相同 | END 行号少了1（off-by-one），旧代码残留 |
+| `BRACKET_BALANCE` | 替换前后 `(){}[]` 括号平衡发生变化 | 替换内容缺少闭合括号，或多包含了开括号 |
+
+**返回示例：**
+
+```json
+// replace 有 warning 时
+{
+  "status": "ok",
+  "file": "/path/to/file.dart",
+  "removed": 5,
+  "added": 8,
+  "total": 198,
+  "warnings": [
+    "DUPLICATE_LINE: line 83 is identical to the last replaced line (possible off-by-one in END). Content: '  subtitle: Text(device.lastSeen),'",
+    "BRACKET_BALANCE: ()...() changed by -1 (1 more closes). Replacement may have mismatched brackets."
+  ]
+}
+```
+
+**收到 warnings 后必须：**
+1. `DUPLICATE_LINE` → 检查是否 END 需要 +1，用 `show` 确认后重新 `replace`
+2. `BRACKET_BALANCE` → 检查替换内容的括号是否完整闭合
+3. 如果是误报（故意的不平衡替换）→ 忽略即可
+
+> **注意**: 没有 warnings 时，返回 JSON 中不包含 `warnings` 字段（不会返回空数组）。
 
 ## 多语言编辑最佳实践
 
@@ -324,6 +409,9 @@ json.dump(spec, sys.stdout)
 }
 ```
 
+> ⚠️ **字段名是 `"action"` 不是 `"type"`！** 常见错误：写成 `"type": "replace"` 会被静默忽略。
+> 正确写法：`"action": "replace-lines"` / `"action": "insert-after"` / `"action": "delete-lines"`。
+
 多文件: `{"files": [{"file": "a.py", "edits": [...]}, ...]}`
 
 ## Write JSON 格式
@@ -372,6 +460,59 @@ json.dump(spec, sys.stdout)
     "end": "2026-02-22T15:02:21.809282",
     "elapsed_sec": 0.0008
   }
+}
+```
+
+## Generate 返回格式
+
+### generate 单文件返回
+
+```json
+{
+  "status": "ok",
+  "mode": "single",
+  "files": 1,
+  "results": [{"file": "/absolute/path/to/file.json", "lines": 200, "bytes": 4096}],
+  "stderr": null,
+  "timing": {
+    "start": "2026-02-25T15:01:04.304603",
+    "end": "2026-02-25T15:01:04.335128",
+    "elapsed_sec": 0.03
+  }
+}
+```
+
+### generate 多文件返回
+
+```json
+{
+  "status": "ok",
+  "mode": "multi",
+  "files": 3,
+  "results": [
+    {"file": "/path/a.json", "lines": 44, "bytes": 532},
+    {"file": "/path/b.md", "lines": 20, "bytes": 312},
+    {"file": "/path/c.json", "lines": 88, "bytes": 1024}
+  ],
+  "stderr": null,
+  "timing": {
+    "start": "2026-02-25T15:02:21.808521",
+    "end": "2026-02-25T15:02:21.839282",
+    "elapsed_sec": 0.03
+  }
+}
+```
+
+### generate 错误返回
+
+```json
+{
+  "status": "error",
+  "message": "Script execution failed",
+  "exit_code": 1,
+  "stderr": "NameError: name 'foo' is not defined",
+  "stdout": "",
+  "timing": {"start": "...", "end": "...", "elapsed_sec": 0.01}
 }
 ```
 
@@ -424,33 +565,117 @@ fe replace /tmp/app.py 10 12 "new content\n"
 
 ### 从零创建大文件 (200+ 行)
 
-> **⚠️ 判断是否需要分段的决策流程：**
+> **⚠️ 首选 `fast-generate`，备选分段 heredoc。**
 >
-> 这个技巧解决的**不是文件写入速度**问题（`paste --stdin` 本身写任意大小都很快），
-> 而是 **AI 单次 Bash 调用的 token 输出上限**——heredoc/echo 内容过长会被截断或超时。
+> 所有文件写入工具（Write、paste、heredoc）都要求 AI 输出完整文件内容作为 token。
+> 当文件 200+ 行时，AI 的输出 token 上限成为瓶颈。
+> **`fast-generate` 的核心优势**：AI 只需输出紧凑的 Python 代码（~70 行），
+> 由代码在本地执行后生成 375+ 行的文件内容 —— **5x+ token 压缩比**。
 >
 > ```
-> AI 需要创建文件
+> AI 需要创建大文件
 >   │
->   ├─ 内容已存在于文件/用户粘贴？
->   │    → 直接 paste --stdin / save-pasted，不需要分段
+>   ├─ 内容有规律、可用代码生成？(如配置、数据、批量结构)
+>   │    → fast-generate --stdin（首选，5x+ 压缩）
 >   │
->   ├─ AI 从零生成，≤150 行？
->   │    → 直接单次 heredoc 或 Write 工具，不需要分段
+>   ├─ 内容无规律、必须逐字输出？(如自由文本、文章)
+>   │    ├─ ≤150 行 → 直接 Write 工具或 heredoc
+>   │    ├─ 150-200 行 → 尝试单次，截断则分段
+>   │    └─ >200 行 → 分段 heredoc + cat 合并
 >   │
->   ├─ AI 从零生成，150-200 行？
->   │    → 可以尝试单次，如果被截断再分段
->   │
->   └─ AI 从零生成，>200 行？
->        → 直接用分段技巧，不要尝试单次（大概率会超时）
+>   └─ 内容已存在于文件/用户粘贴？
+>        → paste --stdin / save-pasted（不需要生成）
 > ```
 
-当 AI 需要**从零生成**一个大文件（无源文件可 `cp`），且内容超过 ~200 行，
-单次 Write/echo/heredoc 会因 token 输出上限被截断或超时。
-用分段 heredoc + `cat` 合并 + `paste --stdin` 逐步累积：
+#### 方式 1: fast-generate（推荐）
+
+AI 输出 Python 代码，代码在本地执行，stdout 写入文件。
+
+**单文件模式**（stdout → 一个文件）：
 
 ```bash
-fe() { python3 "/path/to/fast-edit/fast_edit.py" "$@"; }
+fe() { python3 "/Users/wudi/data/code/ai_tools/git_skills/wudi/fast-edit/fast_edit.py" "$@"; }
+
+# AI 只需写 ~30 行 Python，生成 200+ 行 JSON
+python3 << 'PYEOF' | fe fast-generate --stdin -o /path/to/output.json
+import json
+
+data = {
+    "episodes": [
+        {
+            "id": i,
+            "title": f"Episode {i}",
+            "scenes": [{"shot": j, "duration": 2.5} for j in range(1, 7)]
+        }
+        for i in range(1, 16)
+    ]
+}
+print(json.dumps(data, indent=2, ensure_ascii=False))
+PYEOF
+```
+
+**多文件模式**（stdout = JSON 文件规范）：
+
+```bash
+# AI 写 ~70 行 Python，一次生成多个文件
+python3 << 'PYEOF' | fe fast-generate --stdin
+import json
+
+files = []
+for i in range(1, 16):
+    files.append({
+        "file": f"/path/to/ep{i:02d}/dialogue.md",
+        "content": f"# Episode {i}
+
+## Scene 1
+
+Dialogue here...
+"
+    })
+    files.append({
+        "file": f"/path/to/ep{i:02d}/config.json",
+        "content": json.dumps({"episode": i, "duration": 30}, indent=2)
+    })
+
+print(json.dumps({"files": files}))
+PYEOF
+```
+
+**返回格式**：
+
+```json
+{
+  "status": "ok",
+  "mode": "single",
+  "files": 1,
+  "results": [{"file": "/abs/path", "lines": 44, "bytes": 532}],
+  "stderr": null,
+  "timing": {"start": "...", "end": "...", "elapsed_sec": 0.03}
+}
+```
+
+**选项**：
+
+| 选项 | 说明 |
+|------|------|
+| `--stdin` | 从 stdin 读取代码（与 heredoc/pipe 配合） |
+| `-o FILE` | 单文件模式：stdout 直接写入该文件 |
+| `--timeout N` | 执行超时，默认 30 秒 |
+| `--interpreter CMD` | 解释器，默认 python3 |
+| `--no-validate` | 跳过 .json 文件的 JSON 格式验证 |
+
+| 要点 | 说明 |
+|------|------|
+| 压缩比 | ~70 行 Python → 375+ 行输出（5x+） |
+| 适用场景 | 配置文件、数据文件、有规律的批量内容 |
+| JSON 验证 | .json 文件自动验证格式，`--no-validate` 跳过 |
+| 原子写入 | 使用 tempfile+rename，写入失败不会留下半成品 |
+
+#### 方式 2: 分段 heredoc（备选）
+
+当内容无规律、无法用代码生成时，用分段 heredoc + `cat` 合并：
+
+```bash
 # 第 1 段 (~120 行)
 cat > /tmp/part1.md << 'PART1'
 ...first ~120 lines...
@@ -500,13 +725,13 @@ EOF
 
 ## 文件结构
 
-```
 fast-edit/
 ├── fast_edit.py   # CLI 入口
 ├── core.py        # 文件 I/O
 ├── edit.py        # 编辑操作（自动备份）
 ├── paste.py       # 粘贴/写入
 ├── pasted.py      # OpenCode 存储提取
+├── generate.py    # 代码生成写文件（fast-generate）
 ├── check.py       # Python 类型检查
 ├── verify.py      # 验证/备份/回滚/语法检查
 └── skill.md       # 本文档
