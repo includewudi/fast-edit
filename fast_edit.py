@@ -18,6 +18,7 @@ Commands:
     restore FILE                       Restore file from backup
     backups FILE                       List all backups for file
     verify-syntax FILE                 Run language-aware syntax check
+    recover FILE [--session S] [--nth N] [--output F] [--list]
 
 Line numbers: 1-based, inclusive. Output: JSON.
 """
@@ -36,6 +37,7 @@ import pasted
 import check
 import verify
 import generate as gen_mod
+import recover as recover_mod
 
 
 def print_help():
@@ -70,6 +72,9 @@ COMMANDS (all support fast-* prefix, e.g. fast-write, fast-paste):
     Example: fe check myfile.py
     Save pasted content from OpenCode storage (for large pastes)
     Example: fe save-pasted /tmp/file.py
+  recover FILE [--session S] [--nth N] [--output F] [--list]
+    Recover file content from OpenCode session storage
+    Example: fe recover myfile.py --list
   help
     Show this help message
   - Line numbers are 1-based and inclusive
@@ -222,6 +227,22 @@ def main():
         elif cmd in ("verify-syntax", "fast-verify-syntax") and rest:
             result = verify.verify_syntax(rest[0])
         
+
+        # Recover from session storage
+        elif cmd in ("recover", "fast-recover") and rest:
+            target_file = [x for x in rest if not x.startswith("--")][0]
+            session_id = get_arg(rest, "--session")
+            nth_str = get_arg(rest, "--nth")
+            nth = int(nth_str) if nth_str else 1
+            output = get_arg(rest, "-o") or get_arg(rest, "--output")
+            list_only = "--list" in rest
+            result = recover_mod.recover(
+                target_file,
+                session_id=session_id,
+                nth=nth,
+                output=output,
+                list_only=list_only,
+            )
         else:
             # Check if it's a known command with missing args
             known = {
@@ -231,7 +252,7 @@ def main():
                 'write': '[--stdin] [SPEC]', 'generate': '[--stdin] [SCRIPT] [-o FILE]',
                 'check': 'FILE [--checker NAME]', 'save-pasted': 'FILE [--min-lines N]',
                 'verify': 'FILE [--context N]', 'restore': 'FILE', 'backups': 'FILE',
-                'verify-syntax': 'FILE',
+                'verify-syntax': 'FILE', 'recover': 'FILE [--session S] [--nth N] [--output F] [--list]',
             }
             base = cmd.removeprefix('fast-')
             if base in known:
