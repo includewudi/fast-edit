@@ -19,6 +19,8 @@ Commands:
     backups FILE                       List all backups for file
     verify-syntax FILE                 Run language-aware syntax check
     recover FILE [--session S] [--nth N] [--output F] [--list]
+    outline FILE [--format json|tree]           Extract Python symbols (functions/classes/methods)
+    apply [--stdin] [SPEC] [--dry-run|--apply]    Symbol-targeted edits (replace/delete/insert by symbol)
 
 Line numbers: 1-based, inclusive. Output: JSON.
 """
@@ -38,6 +40,8 @@ import check
 import verify
 import generate as gen_mod
 import recover as recover_mod
+import outline as outline_mod
+import apply as apply_mod
 
 
 def print_help():
@@ -75,6 +79,12 @@ COMMANDS (all support fast-* prefix, e.g. fast-write, fast-paste):
   recover FILE [--session S] [--nth N] [--output F] [--list]
     Recover file content from OpenCode session storage
     Example: fe recover myfile.py --list
+  outline FILE [--format json|tree]
+    Extract Python symbols (functions/classes/methods)
+    Example: fe outline myfile.py --format tree
+  apply [--stdin] [SPEC] [--dry-run|--apply]
+    Symbol-targeted edits (replace/delete/insert by symbol)
+    Example: fe apply --stdin --dry-run < spec.json
   help
     Show this help message
   - Line numbers are 1-based and inclusive
@@ -243,6 +253,31 @@ def main():
                 output=output,
                 list_only=list_only,
             )
+
+        # Outline: extract Python symbols
+        elif cmd in ("outline", "fast-outline") and rest:
+            filepath = [x for x in rest if not x.startswith("--")][0]
+            fmt = get_arg(rest, "--format") or "json"
+            result = outline_mod.outline(filepath, fmt=fmt)
+        
+        # Apply: symbol-targeted edits
+        elif cmd in ("apply", "fast-apply"):
+            if "--stdin" in rest:
+                spec = json.load(sys.stdin)
+            else:
+                non_flags = [x for x in rest if not x.startswith("--")]
+                if not non_flags:
+                    raise ValueError("apply requires --stdin or a spec file path")
+                spec = json.load(open(non_flags[0]))
+            # Override mode from CLI flags
+            if "--dry-run" in rest:
+                spec["mode"] = "dry-run"
+            elif "--apply" in rest:
+                spec["mode"] = "apply"
+            result = apply_mod.apply(spec)
+            if result.get('status') == 'error':
+                print(json.dumps(result, indent=2, ensure_ascii=False), file=sys.stderr)
+                sys.exit(1)
         else:
             # Check if it's a known command with missing args
             known = {
@@ -252,7 +287,7 @@ def main():
                 'write': '[--stdin] [SPEC]', 'generate': '[--stdin] [SCRIPT] [-o FILE]',
                 'check': 'FILE [--checker NAME]', 'save-pasted': 'FILE [--min-lines N]',
                 'verify': 'FILE [--context N]', 'restore': 'FILE', 'backups': 'FILE',
-                'verify-syntax': 'FILE', 'recover': 'FILE [--session S] [--nth N] [--output F] [--list]',
+                'verify-syntax': 'FILE', 'recover': 'FILE [--session S] [--nth N] [--output F] [--list]', 'outline': 'FILE [--format json|tree]', 'apply': '[--stdin] [SPEC] [--dry-run|--apply]',
             }
             base = cmd.removeprefix('fast-')
             if base in known:
