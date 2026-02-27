@@ -59,9 +59,9 @@ fe save-pasted FILE --min-lines 50    # 自定义行数阈值
 fe save-pasted FILE --msg-id msg_xxx  # 指定消息 ID
 fe save-pasted FILE --extract         # 提取 ```...``` 代码块
 fe save-pasted FILE --nth 2           # 第2个最近的大粘贴
-fe recover FILE --list               # 列出最近对 FILE 的所有写操作
-fe recover FILE                       # 恢复最近一次写操作的内容
-fe recover FILE --nth 3              # 恢复第3次最近的写操作
+fe recover FILE --list               # [OpenCode 专属] 列出最近对 FILE 的所有写操作
+fe recover FILE                       # [OpenCode 专属] 恢复最近一次写操作的内容
+fe recover FILE --nth 3              # [OpenCode 专属] 恢复第3次最近的写操作
 fe recover FILE --session ses_xxx    # 从指定 session 恢复
 fe recover FILE -o /tmp/out.py       # 输出到指定文件
 fe help
@@ -167,7 +167,7 @@ fe replace file.dart 74 79 "new widget code\
 | 编辑后类型检查 | `lsp_diagnostics` (推荐) 或 `check` |
 | AI 从零生成大文件/批量文件 (200+行) | **`fast-generate --stdin`** (代码生成，5x+ token 压缩) |
 | AI 从零生成大文件 (备选, 无 Python) | 分段 heredoc → `cat` 合并 → `paste --stdin` |
-| AI 写了大文件但有小错，想恢复重编辑 | **`recover`** (从 session 恢复内容) |
+| AI 写了大文件但有小错，想恢复重编辑 | **`recover`** [OpenCode 专属] (从 session 恢复内容) |
 
 ## 编辑后验证（推荐工作流）
 
@@ -798,7 +798,7 @@ fe write --stdin << 'EOF'
 EOF
 ```
 
-## Recover — 从 Session 恢复文件内容
+## Recover — 从 OpenCode Session 恢复文件内容（OpenCode 专属）
 
 > **场景**: AI 写了一个大文件（300+ 行）但有小错误，重新生成太慢。
 > `recover` 从 OpenCode 的 session 存储中提取上次写入的内容，你只需修改出错的小部分。
@@ -890,7 +890,7 @@ fast-edit/
 ├── paste.py       # 粘贴/写入
 ├── pasted.py      # OpenCode 存储提取
 ├── generate.py    # 代码生成写文件（fast-generate）
-├── recover.py     # Session 存储恢复（recover）
+├── recover.py     # OpenCode Session 存储恢复（recover, OpenCode 专属）
 ├── check.py       # Python 类型检查
 ├── verify.py      # 验证/备份/回滚/语法检查
 └── skill.md       # 本文档

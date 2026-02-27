@@ -80,11 +80,11 @@ def _extract_bash_cat_target(cmd):
 def _extract_bash_cat_content(cmd):
     """Extract heredoc content from: cat > FILE << 'MARKER'\ncontent\nMARKER"""
     # Quoted marker: << 'EOF' or << "EOF"
-    m = re.search(r"<<\s*['\"]([\w]+)['\"]\s*\n(.*?)\n\1(?:\s*$)", cmd, re.DOTALL)
+    m = re.search(r"<<\s*['\"]([\w]+)['\"]\s*\n(.*?)\n\1(?=\s*\n|\s*$)", cmd, re.DOTALL)
     if m:
         return m.group(2)
     # Unquoted marker: << EOF
-    m = re.search(r"<<\s*([\w]+)\s*\n(.*?)\n\1(?:\s*$)", cmd, re.DOTALL)
+    m = re.search(r"<<\s*([\w]+)\s*\n(.*?)\n\1(?=\s*\n|\s*$)", cmd, re.DOTALL)
     return m.group(2) if m else None
 
 
@@ -309,6 +309,22 @@ def recover(target_file, session_id=None, nth=1, output=None, list_only=False):
                 f"Found write (tool={target_entry['tool']}) but could not extract content. "
                 f"Part: {target_entry['part_id']}"
             ),
+        }
+
+    # For bash/fast-edit, content is command text — show it, don't write
+    if target_entry["tool"] == "bash/fast-edit":
+        return {
+            "status": "ok",
+            "mode": "command-ref",
+            "message": (
+                "Found fast-edit command. Content is the bash command (not full file). "
+                "Use this as reference to replay the operation."
+            ),
+            "target_file": target_entry["target_file"],
+            "command": content,
+            "time": datetime.fromtimestamp(
+                target_entry["timestamp"] / 1000
+            ).strftime("%Y-%m-%d %H:%M:%S"),
         }
 
     # For edit tool, content is the full JSON input — show it, don't write
