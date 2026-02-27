@@ -61,6 +61,32 @@ fe save-pasted FILE --extract         # 提取 ```...``` 代码块
 fe save-pasted FILE --nth 2           # 第2个最近的大粘贴
 fe help
 ```
+
+## ⚠️ 大文件生成必须先判断是否分段（强制规则）
+
+> **任何要生成 >200 行的新文件**，必须先判断是否可用 `fast-generate` 或分段方式，禁止直接单次 heredoc/Write。
+
+```
+AI 需要创建文件
+  │
+  ├─ 内容已存在于文件/用户粘贴？
+  │    → 直接 paste --stdin / save-pasted，不需要分段
+  │
+  ├─ 内容可用代码生成？(配置/数据/批量结构)
+  │    → fast-generate --stdin（首选，5x+ 压缩）
+  │
+  ├─ 内容无规律、必须逐字输出？(如自由文本、文章)
+  │    ├─ ≤150 行 → 单次 heredoc / Write
+  │    ├─ 150-200 行 → 尝试单次，截断则分段
+  │    └─ >200 行 → **直接分段**，不要尝试单次
+  │
+  └─ 任何不确定行数 → 默认按 >200 行处理
+```
+
+**强制检查清单：**
+- 是否评估了行数？
+- 是否优先 fast-generate？
+- 如需分段，是否明确每段 120-160 行并最终 cat 合并？
 ## ⚠️ replace 前必须确认行号（强制规则）
 
 > **绝对不要凭记忆 replace。** 行号会因为之前的编辑而偏移，AI 数行号容易 off-by-one。
@@ -597,7 +623,7 @@ AI 输出 Python 代码，代码在本地执行，stdout 写入文件。
 fe() { python3 "/Users/wudi/data/code/ai_tools/git_skills/wudi/fast-edit/fast_edit.py" "$@"; }
 
 # AI 只需写 ~30 行 Python，生成 200+ 行 JSON
-python3 << 'PYEOF' | fe fast-generate --stdin -o /path/to/output.json
+fe fast-generate --stdin -o /path/to/output.json << 'PYEOF'
 import json
 
 data = {
@@ -618,7 +644,7 @@ PYEOF
 
 ```bash
 # AI 写 ~70 行 Python，一次生成多个文件
-python3 << 'PYEOF' | fe fast-generate --stdin
+fe fast-generate --stdin << 'PYEOF'
 import json
 
 files = []
