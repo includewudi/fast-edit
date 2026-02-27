@@ -33,15 +33,38 @@ def decode_content(content: str, encoding: str = None) -> str:
 
 def read_clipboard():
     """Read content from system clipboard (macOS/Linux)."""
+    if sys.platform == "darwin":
+        cmd = ["pbpaste"]
+        tool_name = "pbpaste"
+        install_hint = "pbpaste is built into macOS — it should always be available."
+    elif sys.platform == "win32":
+        raise EnvironmentError(
+            "Clipboard reading is not supported on Windows. Use --stdin instead."
+        )
+    else:
+        cmd = ["xclip", "-selection", "clipboard", "-o"]
+        tool_name = "xclip"
+        install_hint = "Install with: sudo apt install xclip (Debian/Ubuntu) or sudo pacman -S xclip (Arch)"
+
     try:
-        if sys.platform == "darwin":
-            cmd = ["pbpaste"]
-        else:
-            cmd = ["xclip", "-selection", "clipboard", "-o"]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            raise EnvironmentError(
+                f"{tool_name} failed (exit {result.returncode}): {stderr or 'no output'}. "
+                f"Use --stdin as alternative."
+            )
         return result.stdout
-    except Exception:
-        return None
+    except FileNotFoundError:
+        raise EnvironmentError(
+            f"Clipboard tool '{tool_name}' not found. {install_hint} "
+            f"Or use --stdin to read from stdin instead."
+        )
+    except subprocess.TimeoutExpired:
+        raise EnvironmentError(
+            f"{tool_name} timed out after 5s. Clipboard may be locked. "
+            f"Use --stdin as alternative."
+        )
 
 
 def extract_code_blocks(text):

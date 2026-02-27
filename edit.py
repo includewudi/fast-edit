@@ -211,6 +211,46 @@ def delete(filepath, start, end):
         "total": len(result)
     }
 
+def _edit_range(edit):
+    """Extract (start, end) range for an edit. insert-after is treated as a point (line, line)."""
+    action = edit["action"]
+    if action in ("replace-lines", "delete-lines"):
+        return (edit["start"], edit["end"])
+    elif action == "insert-after":
+        ln = edit["line"]
+        return (ln, ln)
+    return (0, 0)
+
+
+def _check_overlapping_edits(sorted_edits, filename=""):
+    """
+    Detect overlapping edit ranges and raise ValueError if found.
+    sorted_edits should already be sorted by start position (descending).
+    """
+    # Build list of (start, end, edit_index) for range-based edits
+    ranges = []
+    for i, edit in enumerate(sorted_edits):
+        s, e = _edit_range(edit)
+        if s > 0:  # skip insert-after at line 0
+            ranges.append((s, e, i, edit["action"]))
+
+    # Sort by start ascending for overlap detection
+    ranges.sort(key=lambda r: (r[0], r[1]))
+
+    for i in range(len(ranges) - 1):
+        s1, e1, idx1, act1 = ranges[i]
+        s2, e2, idx2, act2 = ranges[i + 1]
+        # Two insert-after on same line is fine (they don't conflict)
+        if act1 == "insert-after" and act2 == "insert-after":
+            continue
+        # Overlap: s2 starts within or at s1..e1
+        if s2 <= e1:
+            prefix = f"[{filename}] " if filename else ""
+            raise ValueError(
+                f"{prefix}batch: overlapping edits detected — "
+                f"{act1} [{s1}-{e1}] overlaps with {act2} [{s2}-{e2}]. "
+                f"Split into separate batch calls or adjust line ranges."
+            )
 
 def batch(spec):
     """
@@ -243,6 +283,10 @@ def batch(spec):
             edits,
             key=lambda e: -(e.get("start") or e.get("line", 0))
         )
+
+
+        # Check for overlapping edit ranges
+        _check_overlapping_edits(sorted_edits, os.path.basename(filepath))
 
         for edit in sorted_edits:
             action = edit["action"]

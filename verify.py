@@ -17,6 +17,7 @@ from datetime import datetime
 from core import read_lines
 
 BACKUP_DIR = os.path.expanduser("~/.fast-edit-backups")
+MAX_BACKUPS_PER_FILE = 10
 
 
 def _file_key(filepath):
@@ -43,7 +44,7 @@ def _latest_backup(filepath):
     return None, None
 
 
-def backup(filepath):
+def backup(filepath, max_backups=MAX_BACKUPS_PER_FILE):
     """
     Create a timestamped backup of the file.
     Returns backup path.
@@ -64,7 +65,31 @@ def backup(filepath):
     with open(meta_path, "w") as f:
         f.write(abs_path)
 
+    # Prune old backups
+    _cleanup_old_backups(filepath)
+
     return backup_path
+
+
+def _cleanup_old_backups(filepath):
+    """Remove old backups, keeping only the most recent MAX_BACKUPS_PER_FILE."""
+    bdir = _backup_dir(filepath)
+    if not os.path.isdir(bdir):
+        return
+    entries = sorted(
+        [e for e in os.listdir(bdir) if not e.endswith('.meta')],
+        reverse=True
+    )
+    # Keep the newest MAX_BACKUPS_PER_FILE, delete the rest
+    for old_entry in entries[MAX_BACKUPS_PER_FILE:]:
+        old_path = os.path.join(bdir, old_entry)
+        meta_path = old_path + '.meta'
+        try:
+            os.remove(old_path)
+            if os.path.exists(meta_path):
+                os.remove(meta_path)
+        except OSError:
+            pass  # best-effort cleanup
 
 
 def verify(filepath, context=1):
