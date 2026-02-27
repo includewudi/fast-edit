@@ -671,6 +671,48 @@ PYEOF
 | JSON 验证 | .json 文件自动验证格式，`--no-validate` 跳过 |
 | 原子写入 | 使用 tempfile+rename，写入失败不会留下半成品 |
 
+⚠️ **fast-generate 常见致命错误（必读）**
+
+> 以下错误会导致**输出文件 0 字节**，且无任何报错提示。
+
+| 禁忌 | 原因 | 后果 |
+|------|------|------|
+| 代码中包含 `if __name__ == "__main__": main()` | Python 执行到 `main()` 会运行整个脚本逻辑（API 调用、文件操作等），而不是计算 `content` | 脚本副作用被执行，`print(content)` 永远不会被调用 |
+| 代码中包含 `sys.exit()` | `sys.exit()` 直接终止进程 | `print()` 之前进程已退出，stdout 为空 → 0 字节文件 |
+| 把完整可执行脚本包在 `content = r'''...'''; print(content)` 里 | 三引号内的 `import`/`def`/`class` 虽然不会执行，但如果脚本内部调用了 `main()` 或有顶层 `sys.exit()`，Python 会在解析到 `print` 之前终止 | 文件为空或只有部分输出 |
+
+**正确写法**：fast-generate 的代码应该**只做一件事** — 计算并 `print()` 文件内容。
+
+```python
+# ✅ 正确：纯粹的内容生成
+content = '''#!/usr/bin/env python3
+import sys
+import json
+
+def main():
+    data = json.load(sys.stdin)
+    print(json.dumps(data, indent=2))
+
+if __name__ == "__main__":
+    main()
+'''
+print(content)
+
+# ❌ 错误：把真正的脚本逻辑放进来
+import sys
+import requests  # 会真的执行！
+
+def main():
+    resp = requests.get('https://api.example.com')  # 真的发请求！
+    # ... 做了一堆事 ...
+    sys.exit(0)  # 进程终止，print 永远不会执行
+
+content = f'result: {resp.text}'
+print(content)  # ← 永远执行不到这里
+```
+
+**核心原则**：generate 代码 ≠ 目标脚本本身。generate 代码是**生成器**，目标脚本是**被生成的文本**。两者不能混为一体。
+
 #### 方式 2: 分段 heredoc（备选）
 
 当内容无规律、无法用代码生成时，用分段 heredoc + `cat` 合并：
