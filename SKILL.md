@@ -173,7 +173,7 @@ PY
 ## 命令速查
 
 ```bash
-# ⚠️ 优先用函数封装（FE=... 变量在 zsh 下 $FE 只展开第一个词，会导致 command not found）
+# ✅ 优先用 fe() 函数封装（❌ 不要用变量赋值，zsh 下会 command not found）
 fe() { python3 "/path/to/fast-edit/fast_edit.py" "$@"; }
 
 # 所有命令支持 fast-* 前缀避免 shell 内置命令冲突
