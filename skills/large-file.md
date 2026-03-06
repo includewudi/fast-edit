@@ -5,26 +5,40 @@ description: 大文件生成指南：fast-generate 与分段 heredoc
 
 # 大文件生成指南
 
-当 AI 需要创建 >200 行的新文件时，直接输出完整内容会消耗大量 token，且可能截断。本指南提供两种方案：**fast-generate（适用于有规律内容）** 和 **分段 heredoc（备选）**。
+当 AI 需要创建 >120 行的新文件时，直接输出完整内容会消耗大量 token，且可能截断。本指南提供两种方案：**fast-generate（仅限重复模板≥5次的结构化内容）** 和 **分段 heredoc（DEFAULT 方式）**。
 
 > **⚠️ AI 能力上限硬性警告**
-> **你的 token 输出上限约 100-150 行。fast-generate 不会改变这个事实。**
-> fast-generate 的代码本身也是你的 token 输出。generate 代码必须 ≤80 行，否则你写不完。
-> 只有内容有循环/规律时 generate 才有效，它不是万能压缩器。
+> **你的单次 token 输出上限约 120 行。这是硬性物理限制，任何工具都无法绕过。**
+> fast-generate 的代码本身也是你的 token 输出。generate 代码 MUST ≤80 行。
+> 只有内容有重复模板（同一模板≥5次 + 变量可枚举）时 generate 才有效，它不是万能压缩器。
+> **markdown / 文档 / 含代码块 = 默认非结构化 → MUST 用分段写入。**
 
-**核心思路**：AI 输出紧凑的生成器代码（而非完整文件内容），由代码在本地执行后生成大文件。仅适用于有规律的批量内容（配置、数据、重复结构）。
+**核心思路**：AI 输出紧凑的生成器代码（而非完整文件内容），由代码在本地执行后生成大文件。仅适用于有重复模板的结构化内容。
 
 **决策树**：
 ```
 AI 需要创建大文件
   │
-  ├─ 内容有规律、可用代码生成？(如配置、数据、批量结构)
-  │    → fast-generate --stdin（generate 代码必须 ≤80 行）
+  │  ⚠️ DEFAULT：任何犹豫 → 直接走分段写入
   │
-  ├─ 内容无规律、必须逐字输出？(如自由文本、文章)
-  │    ├─ ≤150 行 → 直接 Write 工具或 heredoc
-  │    ├─ 150-200 行 → 尝试单次，截断则分段
-  │    └─ >200 行 → 分段 heredoc + cat 合并
+  ├─ Q1: 预估行数
+  │    ├─ ≤120 行 → 单段 cat > file << 'EOF'，结束
+  │    └─ >120 行 / 不确定 → MUST 分段（继续 Q2）
+  │
+  ├─ Q2（可选优化，5秒内决定，MUST NOT 超时）:
+  │    "结构化" 判定：同一模板重复≥5次 + 变量可枚举 + ≤80行Python可表达？
+  │    ⚠️ markdown / 文档 / 含代码块 = 默认非结构化
+  │    YES → fast-generate --stdin（见下方 §方式1）
+  │    NO / 不确定 → 分段写入（MUST NOT 回头重新评估）
+  │
+  ├─ 分段写入（DEFAULT）:
+  │    每段 ≤120 行
+  │    第1段: cat > file << 'EOF'（覆写）
+  │    后续段: cat >> file << 'EOF'（追加）
+  │    ⚠️ MUST 用引号 heredoc << 'EOF'（防 $ ` 展开）
+  │    ⚠️ 每段末尾 MUST 有换行；EOF 标记 MUST 顶格不缩进
+  │    写完: wc -l FILE 校验行数
+  │    中途失败: rm file → 从头重写，MUST NOT 续写半成品
   │
   └─ 内容已存在于文件/用户粘贴？
        → paste --stdin / save-pasted（不需要生成）
@@ -165,34 +179,110 @@ print(content)  # ← 永远执行不到这里
 > PYEOF
 > ```
 
+### 推荐：三引号模板风格（而非 lines.append）
+
+生成代码时，**优先用三引号字符串 + f-string 拼接**，而非逐行 `lines.append()`。代码更短、更易读：
+
+```python
+# ❌ 冗长：逐行 append
+lines = []
+lines.append("<?php")
+lines.append("")
+lines.append("class UserRepo")
+lines.append("{")
+for name in ["find", "save", "delete"]:
+    lines.append(f"    public function {name}(): void")
+    lines.append("    {")
+    lines.append("        // ...")
+    lines.append("    }")
+lines.append("}")
+print("\n".join(lines))
+
+# ✅ 简洁：三引号模板
+parts = []
+parts.append('''<?php
+
+class UserRepo
+{''')
+
+for name in ["find", "save", "delete"]:
+    parts.append(f'''
+    public function {name}(): void
+    {{
+        // ...
+    }}''')
+
+parts.append("\n}")
+print("".join(parts))
+```
+
+**模式总结**：大块静态内容用 `'''...'''`，动态部分用循环 + `f'''...'''`，最后 `"".join(parts)` 或直接 `print()`。
+
+⚠️ **f-string 花括号转义（必读）**
+
+> 生成 **Go / JS / PHP / Java / CSS** 等含花括号 `{}` 的代码时，f-string 会把 `{` `}` 当成占位符。
+> **必须双写 `{{` `}}` 来输出字面花括号。**
+
+```python
+# ❌ Python 报错：SyntaxError 或 KeyError
+code = f"""
+function demo() {
+    return {result};
+}
+"""
+
+# ✅ 正确：非变量的花括号双写
+code = f"""
+function demo() {{
+    return {result};
+}}
+"""
+
+# ✅ 也可以：静态部分不用 f-string，避免转义
+header = '''function demo() {
+    return '''
+code = header + result + "\n}"
+```
+
+| 场景 | 推荐写法 |
+|------|----------|
+| 纯静态内容（无变量插值） | `'''...'''` — 花括号无需转义 |
+| 有变量插值 | `f'''...'''` — 非变量花括号写 `{{` `}}` |
+| 花括号密度极高（如 JSON 模板） | 用 `json.dumps()` 生成，不手拼 |
+| 混合场景 | 静态用 `'''`，动态用 `f'''`，最后 join |
+
 ---
 
-## 方式 2: 分段 heredoc（备选）
+## 方式 2: 分段写入（DEFAULT — 大文件默认方式）
 
-当内容无规律、无法用代码生成时，用分段 heredoc + `cat` 合并：
+当内容无规律、无法用代码生成时（即绝大多数大文件场景），用分段 heredoc 直接追加写入：
 
 ```bash
-# 第 1 段 (~120 行)
-cat > /tmp/part1.md << 'PART1'
-...first ~120 lines...
-PART1
+# 第 1 段（≤120 行）— 覆写创建
+cat > /path/to/target.md << 'EOF'
+...first ≤120 lines...
+EOF
 
-# 第 2 段 (~120 行)
-cat > /tmp/part2.md << 'PART2'
-...next ~120 lines...
-PART2
+# 第 2 段（≤120 行）— 追加
+cat >> /path/to/target.md << 'EOF'
+...next ≤120 lines...
+EOF
 
-# 合并 → 写入目标
-cat /tmp/part1.md /tmp/part2.md > /tmp/combined.md
-fe paste /path/to/target.md --stdin < /tmp/combined.md
+# 第 3 段（≤120 行）— 追加
+cat >> /path/to/target.md << 'EOF'
+...next ≤120 lines...
+EOF
 
-# 清理
-rm -f /tmp/part*.md /tmp/combined*.md
+# 写完校验
+wc -l /path/to/target.md
 ```
 
 | 要点 | 说明 |
 |------|------|
-| 每段建议 120-160 行 | 太长 heredoc 可能超时；太短则轮次多 |
-| 用 `'MARKER'` 引号 | 防止 heredoc 内 `$变量` 被展开 |
-| **不要用** `insert --stdin` | 多行 stdin 时只写入 1 行 (已知限制) |
-| 用 `paste --stdin` | 覆写整个文件，所以每次要 `cat` 累积所有段 |
+| 每段 MUST ≤120 行 | 超过 120 行 AI 可能截断 |
+| 第1段用 `cat >` 覆写 | 后续段 MUST 用 `cat >>` 追加 |
+| MUST 用 `<< 'EOF'` 引号 heredoc | 防止 `$变量` 和 `` `反引号` `` 被展开 |
+| 每段末尾 MUST 有换行 | 否则下段内容会接在上段最后一行后面 |
+| EOF 标记 MUST 顶格 | 不能有空格或 Tab 缩进，否则 heredoc 不终止 |
+| 写完 MUST `wc -l` 校验 | 确认实际行数与预期一致 |
+| 中途失败 → `rm file` 重写 | MUST NOT 尝试续写半成品文件 |

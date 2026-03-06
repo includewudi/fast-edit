@@ -7,7 +7,7 @@ description: 典型工作流：粘贴保存、大文件生成、编辑验证
 
 入口摘要：本文档涵盖 fast-edit 的核心使用流程，包括：
 - **粘贴保存**：`save-pasted`（首选，零 token）→ `paste --stdin`（降级）→ `paste --stdin --base64`（特殊字符）
-- **大文件生成**：`fast-generate`（适用于有规律内容，generate 代码 ≤80 行）→ 分段 heredoc（备选），详见 `large-file.md`
+- **大文件生成**：分段 heredoc（DEFAULT，>120行）→ `fast-generate`（可选优化，重复模板≥5次），详见 `large-file.md`
 - **编辑验证**：`verify` 对比差异 → `verify-syntax` 语法检查 → `restore` 回滚
 
 ## 编辑后验证（推荐工作流）
@@ -113,27 +113,39 @@ fe replace /tmp/app.py 10 12 "new content\n"
 `save-pasted` 直接读取文件系统，不需要 AI 重新输出。
 **save-pasted 失败时**（找不到匹配的粘贴内容）才降级到 `paste --stdin`。
 
-## 从零创建大文件 (200+ 行)
+## 从零创建大文件 (>120 行)
 
-> **⚠️ 首选 `fast-generate`，备选分段 heredoc。**
+> **⚠️ 默认方式：分段 heredoc（cat > / cat >>）。可选优化：fast-generate。**
 >
 > 所有文件写入工具（Write、paste、heredoc）都要求 AI 输出完整文件内容作为 token。
-> 当文件 200+ 行时，AI 的输出 token 上限成为瓶颈。
-> **`fast-generate` 的核心优势**：AI 只需输出紧凑的 Python 代码（≤80 行），
-> 由代码在本地执行后生成大量文件内容。仅适用于有规律的批量内容。
+> 当文件 >120 行时，AI 的单次输出 token 上限成为瓶颈。
+> **分段写入**是默认安全路径。`fast-generate` 仅在同一模板重复≥5次时可选。
 
 ### 决策树
 
 ```
 AI 需要创建大文件
   │
-  ├─ 内容有规律、可用代码生成？(如配置、数据、批量结构)
-  │    → fast-generate --stdin（generate 代码必须 ≤80 行）
+  │  ⚠️ DEFAULT：任何犹豫 → 直接走分段写入
   │
-  ├─ 内容无规律、必须逐字输出？(如自由文本、文章)
-  │    ├─ ≤150 行 → 直接 Write 工具或 heredoc
-  │    ├─ 150-200 行 → 尝试单次，截断则分段
-  │    └─ >200 行 → 分段 heredoc + cat 合并
+  ├─ Q1: 预估行数
+  │    ├─ ≤120 行 → 单段 cat > file << 'EOF'，结束
+  │    └─ >120 行 / 不确定 → MUST 分段（继续 Q2）
+  │
+  ├─ Q2（可选优化，5秒内决定，MUST NOT 超时）:
+  │    "结构化" 判定：同一模板重复≥5次 + 变量可枚举 + ≤80行Python可表达？
+  │    ⚠️ markdown / 文档 / 含代码块 = 默认非结构化
+  │    YES → fast-generate --stdin（见 skills/large-file.md）
+  │    NO / 不确定 → 分段写入（MUST NOT 回头重新评估）
+  │
+  ├─ 分段写入（DEFAULT）:
+  │    每段 ≤120 行
+  │    第1段: cat > file << 'EOF'（覆写）
+  │    后续段: cat >> file << 'EOF'（追加）
+  │    ⚠️ MUST 用引号 heredoc << 'EOF'（防 $ ` 展开）
+  │    ⚠️ 每段末尾 MUST 有换行；EOF 标记 MUST 顶格不缩进
+  │    写完: wc -l FILE 校验行数
+  │    中途失败: rm file → 从头重写，MUST NOT 续写半成品
   │
   └─ 内容已存在于文件/用户粘贴？
        → paste --stdin / save-pasted（不需要生成）
@@ -142,9 +154,9 @@ AI 需要创建大文件
 ### 详细用法
 
 详见 `skills/large-file.md`，包含：
-- `fast-generate` 单文件/多文件模式
+- 分段 heredoc 写入（默认方式）
+- `fast-generate` 单文件/多文件模式（可选优化）
 - 常见致命错误（`main()` 调用、`sys.exit()` 等）
-- 分段 heredoc 备选方案
 
 ## 用户粘贴多份代码
 

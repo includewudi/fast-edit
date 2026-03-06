@@ -27,11 +27,24 @@ description: 大文件编辑、批量修改、剪贴板/stdin粘贴、多文件�
   │    ├─ 降级: paste --stdin（save-pasted 失败时）
   │    └─ 特殊字符多: paste --stdin --base64
   │
-  ├─ 从零创建新文件
-  │    ├─ ≤150 行 → heredoc / Write
-  │    ├─ >200 行 + 有规律 → fast-generate --stdin（见 skills/large-file.md）
-  │    ├─ >200 行 + 无规律 → 分段 heredoc（见 skills/large-file.md）
-  │    └─ 必须先评估行数！（见 §安全守则3）
+  ├─ 从零创建新文件（见 §守则3）
+  │    │  ⚠️ 默认策略：任何犹豫 → 直接走分段写入
+  │    │
+  │    ├─ 步骤1: 预估行数
+  │    │    ├─ ≤120 行 → 单段 cat > file << 'EOF'
+  │    │    └─ >120 行 / 不确定 → 必须分段（继续步骤2）
+  │    │
+  │    ├─ 步骤2（可选优化，5秒内决定）:
+  │    │    同一模板重复≥5次 + ≤80行Python可表达？
+  │    │    YES → fast-generate --stdin（见 skills/large-file.md）
+  │    │    NO / 不确定 → 分段写入（禁止回头重新评估）
+  │    │
+  │    └─ 分段写入（DEFAULT，见 skills/large-file.md）:
+  │         每段 ≤120 行，MUST 用 << 'EOF' 引号 heredoc
+  │         第1段: cat > file << 'EOF'（覆写）
+  │         后续段: cat >> file << 'EOF'（追加）
+  │         写完: wc -l FILE 校验行数
+  │         失败: rm file → 从头重写，MUST NOT 续写半成品
   │
   ├─ 编辑出错，需要恢复
   │    ├─ 刚编辑的文件 → restore（一键回滚）
@@ -102,33 +115,46 @@ fe replace file.dart 74 79 "new widget code\n"  # 确认后再替换
        含 $、反引号、引号嵌套时用 base64 编码
 ```
 
-### 守则 3: 大文件生成的 AI 能力上限（硬性限制）
+### 守则 3: 大文件生成（硬性限制 + 零犹豫决策）
 
-> **你的 token 输出上限约 100-150 行。fast-generate 不会改变这个事实。**
-> fast-generate 的代码本身也是你的 token 输出。如果 generate 代码超过 80 行，你很可能写不完。
+> **你的单次 token 输出上限约 120 行。这是硬性物理限制，任何工具都无法绕过。**
+> fast-generate 的代码本身也是你的 token 输出。generate 代码 MUST ≤80 行。
+> **任何犹豫 → 直接走分段写入。禁止反复评估。**
 
 ```
-AI 需要创建新文件
+AI 需要生成新文件
   │
-  ├─ ≤100 行 → 直接 heredoc / Write（安全区）
+  │  ⚠️ DEFAULT：任何犹豫 → 直接走分段写入
   │
-  ├─ 100-150 行 → 尝试单次输出，截断则分段
+  ├─ Q1: 预估行数
+  │    ├─ ≤120 行 → 单段 cat > file << 'EOF'，结束
+  │    └─ >120 行 / 不确定 → MUST 分段（继续 Q2）
   │
-  ├─ >150 行 + 内容有规律（配置/数据/批量）
-  │    → fast-generate --stdin
-  │    ⚠️ generate 代码必须 ≤80 行！超过则拆分任务
-  │    ⚠️ 仅适用于有循环/规律的内容，不是万能压缩器
+  ├─ Q2（可选优化，5秒内决定，MUST NOT 超时）:
+  │    "结构化" 判定：同一模板重复≥5次 + 变量可枚举 + ≤80行Python可表达？
+  │    ⚠️ markdown / 文档 / 含代码块 = 默认非结构化
+  │    YES → fast-generate --stdin（见 skills/large-file.md）
+  │    NO / 不确定 → 分段写入（MUST NOT 回头重新评估）
   │
-  └─ >150 行 + 内容无规律（自由文本/文章）
-       → 分段 heredoc（每段 ≤120 行）+ cat 合并
+  └─ 分段写入:
+       每段 ≤120 行
+       第1段: cat > file << 'EOF'（覆写）
+       后续段: cat >> file << 'EOF'（追加）
+       ⚠️ MUST 用引号 heredoc << 'EOF'（防 $ ` 展开）
+       ⚠️ 每段末尾 MUST 有换行；EOF 标记 MUST 顶格不缩进
+       写完: wc -l FILE 校验行数
+       中途失败: rm file → 从头重写，MUST NOT 续写半成品
 ```
 
 **强制检查清单：**
+- [ ] 预估行数了吗？（不确定 = 按 >120 行处理 → 分段）
+- [ ] "结构化" 判定 5 秒内完成了吗？（超时 = 分段写入）
 - [ ] generate 代码是否 ≤80 行？（超过 = 你写不完，必须拆分）
-- [ ] 内容是否真的有规律？（无规律 = 不要用 generate，用分段 heredoc）
-- [ ] 是否评估了总行数？（不确定 = 按 >150 行处理）
+- [ ] 是否用了引号 heredoc `<< 'EOF'`？（无引号 = $ 和 ` 会被展开）
+- [ ] 写完后 `wc -l` 校验了吗？
+- [ ] 生成含 `{}` 的代码？f-string 中非变量花括号 MUST 双写 `{{` `}}`
 
-详细用法见 `skills/large-file.md`。
+详细用法及示例见 `skills/large-file.md`。
 
 ### 守则 4: 危险字符触发器
 
@@ -215,6 +241,7 @@ echo 'python_code' | fe fast-generate --stdin                   # 多文件(stdo
 fe fast-generate script.py -o output.json                       # 脚本文件模式
 fe fast-generate script.py -o out.json --timeout 60             # 自定义超时
 fe fast-generate --stdin -o out.json --no-validate              # 跳过 JSON 验证
+fe fast-generate --stdin -o out.php                              # 单文件模式
 
 # ── 验证/回滚 ──
 fe verify FILE                        # 对比当前文件与备份的差异
@@ -236,6 +263,7 @@ fe recover FILE                       # [OpenCode 专属] 恢复最近一次写�
 fe recover FILE --nth 3              # [OpenCode 专属] 恢复第3次最近的写操作
 fe recover FILE --session ses_xxx    # 从指定 session 恢复
 fe recover FILE -o /tmp/out.py       # 输出到指定文件
+
 fe help
 ```
 
@@ -256,8 +284,8 @@ fe help
 | 编辑改坏了，一键回滚 | `restore` |
 | 编辑后语法检查（多语言） | `verify-syntax` |
 | 编辑后类型检查 | `lsp_diagnostics` (推荐) 或 `check` |
-| AI 从零生成大文件/批量文件 (200+行) | **`fast-generate --stdin`**（仅限有规律内容，generate 代码 ≤80 行） |
-| AI 从零生成大文件 (备选, 无 Python) | 分段 heredoc → `cat` 合并 → `paste --stdin` |
+| AI 从零生成大文件（有重复模板≥5次） | **`fast-generate --stdin`**（generate 代码 ≤80 行） |
+| AI 从零生成大文件（默认方式，>120行） | 分段 heredoc（`cat >` / `cat >>`） |
 | AI 写了大文件但有小错，想恢复重编辑 | **`recover`** [OpenCode 专属] |
 | Python 文件查看符号结构 | `outline` / `outline --format tree` |
 | Python 符号级替换/删除/插入 | `apply` (spec.json \| --stdin) |
@@ -312,13 +340,14 @@ fe verify-syntax FILE       # 3. 语法检查（备选，参考信号）
 | 子文档 | 打开时机 |
 |--------|----------|
 | `skills/shell-safety.md` | 编辑 Go/PHP/TS/JSX/Vue/Java 代码时 |
-| `skills/large-file.md` | 需要创建 >200 行新文件时 |
+| `skills/large-file.md` | 需要创建 >120 行新文件时 |
 | `skills/workflows.md` | 需要完整工作流示例（粘贴、生成、验证）时 |
 | `skills/recover.md` | 需要从 OpenCode session 恢复文件时 |
 | `skills/formats.md` | 需要查看命令返回 JSON 格式时 |
 | `skills/outline-apply.md` | 需要 Python 符号级编辑时 |
 | `skills/api.md` | 需要查看命令详细参数和选项时 |
 | `skills/configuration.md` | 需要配置路径、平台相关设置时 |
+| `skills/timer.md` | 用户配置了 `debug-timer: true` 时 |
 | `skills/development.md` | 需要开发/贡献 fast-edit 本身时 |
 
 ---
@@ -338,6 +367,8 @@ fast-edit/
 ├── apply.py       # 符号定位编辑（apply）
 ├── check.py       # Python 类型检查
 ├── verify.py      # 验证/备份/回滚/语法检查
+├── timer.py       # 端到端计时（timer start/stop）
+├── opencode-tools/  # OpenCode 自定义工具覆盖层（edit.ts, write.ts）
 └── skill.md       # 本文档
 ```
 
