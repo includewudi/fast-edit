@@ -42,6 +42,7 @@ import generate as gen_mod
 import recover as recover_mod
 import outline as outline_mod
 import apply as apply_mod
+import timer as timer_mod
 
 
 def print_help():
@@ -172,6 +173,7 @@ def main():
             interpreter = get_arg(rest, "--interpreter") or "python3"
             output_file = get_arg(rest, "-o")
             no_validate = "--no-validate" in rest
+            timer_id = get_arg(rest, "--timer")
             if "--stdin" in rest:
                 code = sys.stdin.read()
                 result = gen_mod.generate(
@@ -180,12 +182,12 @@ def main():
                     interpreter=interpreter,
                     timeout=timeout_val,
                     validate_json=not no_validate,
+                    timer_id=timer_id,
                 )
             else:
-                # Script file path: first non-flag arg
                 script_args = [x for x in rest if not x.startswith("--") and x != "-o"
                                and x != output_file and x != timeout_str
-                               and x != interpreter]
+                               and x != interpreter and x != timer_id]
                 if not script_args:
                     result = {"status": "error", "message": "generate requires --stdin or a script path"}
                 else:
@@ -195,6 +197,7 @@ def main():
                         interpreter=interpreter,
                         timeout=timeout_val,
                         validate_json=not no_validate,
+                        timer_id=timer_id,
                     )
         
         # Type check
@@ -278,8 +281,18 @@ def main():
             if result.get('status') == 'error':
                 print(json.dumps(result, indent=2, ensure_ascii=False), file=sys.stderr)
                 sys.exit(1)
+        # Timer: start / stop
+        elif cmd in ("timer", "fast-timer"):
+            if not rest:
+                result = {"status": "error", "message": "Usage: timer start | timer stop <ID>"}
+            elif rest[0] == "start":
+                result = timer_mod.start()
+            elif rest[0] == "stop" and len(rest) >= 2:
+                result = timer_mod.stop(rest[1])
+            else:
+                result = {"status": "error", "message": "Usage: timer start | timer stop <ID>"}
+
         else:
-            # Check if it's a known command with missing args
             known = {
                 'show': 'FILE START END', 'replace': 'FILE START END CONTENT',
                 'insert': 'FILE LINE CONTENT', 'delete': 'FILE START END',
@@ -288,6 +301,7 @@ def main():
                 'check': 'FILE [--checker NAME]', 'save-pasted': 'FILE [--min-lines N]',
                 'verify': 'FILE [--context N]', 'restore': 'FILE', 'backups': 'FILE',
                 'verify-syntax': 'FILE', 'recover': 'FILE [--session S] [--nth N] [--output F] [--list]', 'outline': 'FILE [--format json|tree]', 'apply': '[--stdin] [SPEC] [--dry-run|--apply]',
+                'timer': 'start | stop <ID>',
             }
             base = cmd.removeprefix('fast-')
             if base in known:

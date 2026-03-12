@@ -24,6 +24,7 @@ import subprocess
 import time
 from datetime import datetime
 from core import write_file
+import timer as timer_mod
 
 
 def generate(
@@ -33,6 +34,7 @@ def generate(
     interpreter="python3",
     timeout=30,
     validate_json=True,
+    timer_id=None,
 ):
     """
     Execute a script/code and write its stdout output to file(s).
@@ -80,13 +82,13 @@ def generate(
         return {
             "status": "error",
             "message": f"Script timed out after {timeout}s",
-            "timing": _timing(start_time, start_dt),
+            "timing": _timing(start_time, start_dt, timer_id),
         }
     except FileNotFoundError:
         return {
             "status": "error",
             "message": f"Interpreter not found: {interpreter}",
-            "timing": _timing(start_time, start_dt),
+            "timing": _timing(start_time, start_dt, timer_id),
         }
 
     if result.returncode != 0:
@@ -96,7 +98,7 @@ def generate(
             "exit_code": result.returncode,
             "stderr": result.stderr.strip()[:4000],
             "stdout": result.stdout.strip()[:1000],
-            "timing": _timing(start_time, start_dt),
+            "timing": _timing(start_time, start_dt, timer_id),
         }
 
     stdout = result.stdout
@@ -104,13 +106,12 @@ def generate(
 
     # Mode 1: Single file output
     if output_file:
-        return _write_single(output_file, stdout, validate_json, stderr, start_time, start_dt)
+        return _write_single(output_file, stdout, validate_json, stderr, start_time, start_dt, timer_id)
 
-    # Mode 2: Multi-file JSON output (stdout must be JSON spec)
-    return _write_multi(stdout, validate_json, stderr, start_time, start_dt)
+    return _write_multi(stdout, validate_json, stderr, start_time, start_dt, timer_id)
 
 
-def _write_single(output_file, content, validate_json, stderr, start_time, start_dt):
+def _write_single(output_file, content, validate_json, stderr, start_time, start_dt, timer_id=None):
     """Write stdout content to a single file."""
     abs_path = os.path.abspath(output_file)
 
@@ -123,7 +124,7 @@ def _write_single(output_file, content, validate_json, stderr, start_time, start
                 "status": "error",
                 "message": f"Generated content is not valid JSON: {e}",
                 "file": abs_path,
-                "timing": _timing(start_time, start_dt),
+                "timing": _timing(start_time, start_dt, timer_id),
             }
 
     write_file(abs_path, content)
@@ -140,11 +141,11 @@ def _write_single(output_file, content, validate_json, stderr, start_time, start
         "files": 1,
         "results": [file_result],
         "stderr": stderr if stderr else None,
-        "timing": _timing(start_time, start_dt),
+        "timing": _timing(start_time, start_dt, timer_id),
     }
 
 
-def _write_multi(stdout, validate_json, stderr, start_time, start_dt):
+def _write_multi(stdout, validate_json, stderr, start_time, start_dt, timer_id=None):
     """Parse stdout as JSON file spec and write multiple files."""
     try:
         spec = json.loads(stdout)
@@ -153,7 +154,7 @@ def _write_multi(stdout, validate_json, stderr, start_time, start_dt):
             "status": "error",
             "message": f"Script stdout is not valid JSON (multi-file mode requires JSON output): {e}",
             "stdout_preview": stdout[:500],
-            "timing": _timing(start_time, start_dt),
+            "timing": _timing(start_time, start_dt, timer_id),
         }
 
     # Accept both {"files": [...]} and [{"file": ..., "content": ...}]
@@ -165,7 +166,7 @@ def _write_multi(stdout, validate_json, stderr, start_time, start_dt):
         return {
             "status": "error",
             "message": 'Multi-file JSON must be {"files": [...]} or a list of {"file": "...", "content": "..."}',
-            "timing": _timing(start_time, start_dt),
+            "timing": _timing(start_time, start_dt, timer_id),
         }
 
     results = []
@@ -207,7 +208,7 @@ def _write_multi(stdout, validate_json, stderr, start_time, start_dt):
         "files": len(results),
         "results": results,
         "stderr": stderr if stderr else None,
-        "timing": _timing(start_time, start_dt),
+        "timing": _timing(start_time, start_dt, timer_id),
     }
 
     if errors:
@@ -216,11 +217,18 @@ def _write_multi(stdout, validate_json, stderr, start_time, start_dt):
     return result
 
 
-def _timing(start_time, start_dt):
-    """Build timing dict."""
+def _timing(start_time, start_dt, timer_id=None):
     end_time = time.time()
-    return {
+    result = {
         "start": start_dt,
         "end": datetime.now().isoformat(),
         "elapsed_sec": round(end_time - start_time, 4),
     }
+    if timer_id:
+        timer_data = timer_mod.elapsed(timer_id)
+        if timer_data:
+            timer_start_epoch, timer_start_iso = timer_data
+            result["timer_id"] = timer_id
+            result["timer_start"] = timer_start_iso
+            result["total_elapsed_sec"] = round(end_time - timer_start_epoch, 3)
+    return result

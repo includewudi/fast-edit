@@ -118,3 +118,35 @@ def c(): pass
     - 若需要语法检查：安装对应语言的编译器/运行时
     - 若使用 `save-pasted`：确保 OpenCode 本地存储存在
 
+    ## Debug 计时模式
+
+    端到端计时功能默认**关闭**。启用后 AI 会在加载 skill 时自动执行 `fe timer start`，并在后续 `generate` 操作中附带 `--timer` 参数，输出中会包含从 skill 加载到任务完成的总耗时。
+
+    ### 启用方式
+
+    在 `[FAST-EDIT]` 规则块中添加 `debug-timer: true`：
+
+    ```
+    [FAST-EDIT]
+    When you need to edit, create, write, or save files:
+    1. Load the fast-edit skill first: skill("fast-edit")
+    2. Use fast-edit commands (show/replace/insert/delete/batch/paste/write/generate) instead of the built-in Edit/Write tools.
+    3. For batch edits or multi-file writes, prefer fast-batch and fast-write.
+    4. For user-pasted content, prefer save-pasted (zero token, zero escaping).
+    Fast-edit is 100x faster than built-in tools. NEVER use Edit/Write when fast-edit can do the job.
+    Trigger: any intent to create, modify, save, or write a file.
+    debug-timer: true
+    ```
+
+    ### 关闭方式
+
+    删除 `debug-timer: true` 这一行，或改为 `debug-timer: false`。AI 加载 skill 时会跳过所有 timer 相关操作。
+
+    ### 计时数据
+
+    | 项目 | 说明 |
+    |------|------|
+    | 存储位置 | `/tmp/fe-timers/<timer_id>.json` |
+    | 生命周期 | `timer start` 创建，`timer stop` 后自动删除 |
+    | 输出字段 | `total_elapsed_sec`（端到端总耗时），附加在 `generate` 的 timing 输出中 |
+

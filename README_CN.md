@@ -33,6 +33,7 @@
 - **类型检查**：自动检测并运行可用的 Python 类型检查器（basedpyright、pyright、mypy）
 - **零外部依赖**：纯 Python 实现，仅使用标准库
 - **代码生成写文件**：执行代码生成文件内容，批量创建大文件时可实现 5x+ token 压缩
+- **端到端计时**：内置计时器跟踪从 skill 加载到任务完成的总耗时，包含 AI 思考时间
 
 ## 安装
 
@@ -53,6 +54,143 @@ pip install pyright
 # 或
 pip install mypy
 ```
+
+## 在 OpenCode 中使用（替代内置 Edit/Write）
+
+Fast Edit 可以作为 [OpenCode](https://github.com/anthropics/opencode) 的 skill 安装，**完全替代内置的 Edit 和 Write 工具**。提供两种集成方式：
+
+| 方式 | 原理 | 配置量 | 透明度 |
+|------|------|--------|--------|
+| **A: 规则驱动** | AI 读取规则 → 加载 skill → 通过 Bash 调用 `fe` 命令 | 添加规则块 | AI 显式调用 fast-edit |
+| **B: 自定义工具覆盖** | 自定义工具覆盖内置 Edit/Write → fast-edit 在底层运行 | 复制 2 个文件 | 完全透明 — AI 照常使用 Edit/Write |
+
+### 方式 A：规则驱动（显式）
+
+#### 第 1 步：安装 skill
+
+```bash
+# 克隆到 skills 目录
+git clone https://github.com/includewudi/fast-edit.git ~/.config/opencode/skills/fast-edit
+```
+
+#### 第 2 步：添加到 OpenCode 规则
+
+将以下内容添加到项目的 `.opencode/rules` 或全局规则文件（`~/.config/opencode/rules`）中：
+
+```
+[FAST-EDIT]
+When you need to edit, create, write, or save files:
+1. Load the fast-edit skill first: skill("fast-edit")
+2. Use fast-edit commands (show/replace/insert/delete/batch/paste/write/generate) instead of the built-in Edit/Write tools.
+3. For batch edits or multi-file writes, prefer fast-batch and fast-write.
+4. For user-pasted content, prefer save-pasted (zero token, zero escaping).
+Fast-edit is 100x faster than built-in tools. NEVER use Edit/Write when fast-edit can do the job.
+Trigger: any intent to create, modify, save, or write a file.
+```
+
+**可选：启用 Debug 计时模式**
+
+在规则块中添加 `debug-timer: true` 即可启用端到端计时。启用后，AI 会在加载 skill 时自动执行 `fe timer start`，并在 generate 命令中附带 `--timer`，输出中报告总耗时（包含 AI 思考时间）。
+
+```
+debug-timer: true
+```
+
+#### AI 助手的变化
+
+| 操作 | 之前（内置工具） | 之后（fast-edit） |
+|------|-----------------|-------------------|
+| 编辑文件 | `Edit` 工具 → 字符串匹配 → LSP 等待 | `fe replace` / `fe batch` → 即时完成 |
+| 创建文件 | `Write` 工具 → 输出全部内容 | `fe paste --stdin` 或 `fe fast-generate` |
+| 多处编辑 | 3× Edit 调用（~15 秒） | 1× `fe batch`（<0.1 秒） |
+| 大文件（200+ 行） | Write 输出全部内容（token 上限） | `fe fast-generate`（~70 行代码 → 300+ 行输出） |
+| 保存用户粘贴 | Write 工具 + 转义头疼 | `fe save-pasted`（零 token） |
+
+AI 助手每次会话加载一次 skill，之后所有文件操作自动通过 fast-edit 执行。
+
+### 方式 B：自定义工具覆盖（无感接入）
+
+方式 B 在工具层面替换 OpenCode 的内置 Edit 和 Write 工具。AI 无需感知 fast-edit 的存在 — 照常调用 Edit/Write，fast-edit 在底层透明运行。
+
+#### 工作原理：基于 Description 的路由
+
+OpenCode 将每个工具的 `description` 字符串暴露给 AI，作为工具 schema 的一部分。AI 通过阅读 description 来决定**何时**以及**如何**使用该工具。自定义工具（`~/.config/opencode/tools/` 中的 TypeScript 文件）会完全覆盖同名的内置工具 — 包括其 description。
+
+我们的自定义工具在 description 中添加了路由提示：
+
+**内置 Edit description**（简化）：
+> Performs exact string replacements in files. The oldString must match exactly...
+
+**自定义 Edit description**（带 fast-edit 路由）：
+> Performs exact string replacements in files. ...
+> **STOP: If you need to replace a large block (>80 lines)** with repetitive/structured content, do NOT output the full newString here — you will waste tokens. Instead: `skill('fast-edit')`, then use `fe fast-batch --stdin` or `fe fast-generate` via Bash.
+
+**内置 Write description**（简化）：
+> Writes a file to the local filesystem. Overwrites existing files...
+
+**自定义 Write description**（带 fast-edit 路由）：
+> Writes a file to the local filesystem. ...
+> **STOP: For NEW files >150 lines** with repetitive/structured content, do NOT use this tool — you will waste tokens. Instead: `skill('fast-edit')`, then `fe fast-generate --stdin -o FILE` with ≤80 lines of Python generator code.
+
+#### 路由流程
+
+```
+AI 任务：编辑或写入文件
+  │
+  ├─ 小编辑（<80 行）
+  │    → AI 正常调用 Edit 工具
+  │    → edit.ts 拦截：oldString → findLineRange → fe fast-batch --stdin
+  │    → 结果返回给 AI（透明）
+  │
+  ├─ 小写入（<150 行）
+  │    → AI 正常调用 Write 工具
+  │    → write.ts 拦截：content → fe fast-paste --stdin
+  │    → 结果返回给 AI（透明）
+  │
+  ├─ 大编辑（>80 行，有规律）
+  │    → AI 阅读 Edit description → 看到 STOP 提示
+  │    → AI 加载 skill('fast-edit') → 通过 Bash 使用 fe fast-generate
+  │
+  └─ 大写入（>150 行，有规律）
+       → AI 阅读 Write description → 看到 STOP 提示
+       → AI 加载 skill('fast-edit') → 通过 Bash 使用 fe fast-generate
+```
+
+#### 第 1 步：安装 skill
+
+```bash
+git clone https://github.com/includewudi/fast-edit.git ~/.config/opencode/skills/fast-edit
+```
+
+#### 第 2 步：复制自定义工具
+
+```bash
+cp ~/.config/opencode/skills/fast-edit/opencode-tools/*.ts ~/.config/opencode/tools/
+```
+
+这会安装两个文件：
+- `edit.ts` — 覆盖内置 Edit。将字符串匹配编辑转换为 `fe fast-batch` 行号操作。
+- `write.ts` — 覆盖内置 Write。将文件写入委托给 `fe fast-paste --stdin`。
+
+#### 第 3 步（可选）：添加大文件支持规则
+
+方式 B 自动处理中小编辑。对于大文件生成（>150 行），description 提示会告诉 AI 加载 skill。可选添加精简规则块加强引导：
+
+```
+[FAST-EDIT]
+For user-pasted content, prefer save-pasted (zero token, zero escaping).
+```
+
+无需 `skill("fast-edit")` 触发规则 — 自定义工具自动处理路由。
+
+#### AI 的实际体验
+
+| 操作 | AI 做什么 | 实际发生什么 |
+|------|----------|-------------|
+| 编辑文件 | 正常调用 Edit 工具 | `edit.ts` → `fe fast-batch`（即时完成，自动备份） |
+| 写入文件 | 正常调用 Write 工具 | `write.ts` → `fe fast-paste`（自动备份） |
+| 写入 >150 行 | 看到 description 中的 STOP 提示 | AI 加载 skill，使用 `fe fast-generate` |
+| 编辑 >80 行 | 看到 description 中的 STOP 提示 | AI 加载 skill，使用 `fe fast-batch`/`fe fast-generate` |
 
 ## 快速开始
 
@@ -265,6 +403,24 @@ fe check myfile.py --checker mypy
 
 自动检测顺序：`basedpyright` → `pyright` → `mypy`
 
+### `timer start` / `timer stop TIMER_ID`
+
+跟踪端到端总耗时，包含 AI 思考时间。
+
+```bash
+# 启动计时器（返回 timer_id）
+fe timer start
+# → {"status": "ok", "timer_id": "t_a1b2c3d4", "started_at": "2025-01-01T12:00:00.000000"}
+
+# 停止计时并获取总耗时
+fe timer stop t_a1b2c3d4
+# → {"status": "ok", "timer_id": "t_a1b2c3d4", "elapsed_sec": 42.5}
+```
+
+配合 `generate --timer` 使用时，timing 输出会同时包含脚本执行时间（`elapsed_sec`）和从 timer start 开始的总时间（`total_elapsed_sec`）。这能捕获完整周期：skill 加载 → AI 推理 → 代码执行 → 文件写入。
+
+计时数据存储在 `/tmp/fe-timers/`，stop 后自动清理。
+
 
 ### `generate [--stdin] [-o FILE] [SCRIPT] [--timeout N] [--interpreter CMD] [--no-validate]`
 
@@ -298,6 +454,7 @@ fe generate --stdin -o out.json --timeout 60 --interpreter python3.12 --no-valid
 | `--timeout N` | 执行超时（秒） | 30 |
 | `--interpreter CMD` | 执行代码的解释器 | `python3` |
 | `--no-validate` | 跳过 .json 文件的格式验证 | 验证 |
+| `--timer ID` | 附加计时器（来自 `fe timer start`）用于端到端计时 | - |
 
 **为什么使用 generate？** 当 AI 需要创建大文件（200+ 行）时，LLM 输出 token 上限成为瓶颈。所有文件写入工具都要求 LLM 输出完整内容。`generate` 让 LLM 输出紧凑的代码（~70 行），由代码在本地执行后生成内容（~375+ 行）—— 实现 5x+ 压缩比。
 
@@ -313,6 +470,7 @@ fe generate --stdin -o out.json --timeout 60 --interpreter python3.12 --no-valid
 | 从剪贴板保存 | `paste` |
 | 编辑后类型检查 | `check` |
 | AI 从零生成大文件/批量文件 (200+ 行) | `generate --stdin -o FILE` 或 `generate --stdin` |
+| 度量端到端任务耗时（含 AI 思考） | `timer start` → 工作 → `generate --timer ID` |
 
 ## 典型工作流
 
@@ -401,6 +559,8 @@ fast-edit/
 ├── generate.py    # 代码生成写文件
 ├── check.py       # 类型检查
 ├── verify.py      # 验证/备份/回滚/语法检查
+├── timer.py       # 端到端计时（timer start/stop）
+├── opencode-tools/  # OpenCode 自定义工具覆盖层（edit.ts, write.ts）
 ├── skill.md       # 详细使用文档
 ├── TEST_PLAN.md   # 测试计划与结果
 ├── requirements.txt  # 可选依赖

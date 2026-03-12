@@ -33,6 +33,7 @@ A simple three-location fix shouldn't take 30 seconds. Here's why the built-in E
 - **Type checking**: Auto-detects and runs available Python type checkers (basedpyright, pyright, mypy)
 - **Zero external dependencies**: Pure Python, uses only standard library
 - **Code generation**: Execute code to generate file content, achieving 5x+ token compression for bulk file creation
+- **End-to-end timing**: Built-in timer tracks total elapsed time from skill load to task completion, including AI thinking time
 
 ## Installation
 
@@ -53,6 +54,143 @@ pip install pyright
 # or
 pip install mypy
 ```
+
+## Use with OpenCode (Replace Built-in Edit/Write)
+
+Fast Edit can be installed as an [OpenCode](https://github.com/anthropics/opencode) skill to **completely replace the built-in Edit and Write tools**. Two integration methods are available:
+
+| Method | How It Works | Setup Effort | Transparency |
+|--------|-------------|--------------|--------------|
+| **A: Rules-based** | AI reads rules → loads skill → uses `fe` commands via Bash | Add rules block | AI explicitly calls fast-edit |
+| **B: Custom Tool Overlay** | Custom tools override built-in Edit/Write → fast-edit runs under the hood | Copy 2 files | Fully transparent — AI uses Edit/Write as usual |
+
+### Method A: Rules-based (Explicit)
+
+#### Step 1: Install the skill
+
+```bash
+# Clone to your skills directory
+git clone https://github.com/includewudi/fast-edit.git ~/.config/opencode/skills/fast-edit
+```
+
+#### Step 2: Add to your OpenCode rules
+
+Add the following to your project's `.opencode/rules` or global rules file (`~/.config/opencode/rules`):
+
+```
+[FAST-EDIT]
+When you need to edit, create, write, or save files:
+1. Load the fast-edit skill first: skill("fast-edit")
+2. Use fast-edit commands (show/replace/insert/delete/batch/paste/write/generate) instead of the built-in Edit/Write tools.
+3. For batch edits or multi-file writes, prefer fast-batch and fast-write.
+4. For user-pasted content, prefer save-pasted (zero token, zero escaping).
+Fast-edit is 100x faster than built-in tools. NEVER use Edit/Write when fast-edit can do the job.
+Trigger: any intent to create, modify, save, or write a file.
+```
+
+**Optional: Enable debug timing**
+
+Add `debug-timer: true` to the rules block to enable end-to-end timing. When enabled, the AI will automatically run `fe timer start` on skill load and attach `--timer` to generate commands, reporting total elapsed time (including AI thinking time) in the output.
+
+```
+debug-timer: true
+```
+
+#### What changes for the AI agent?
+
+| Operation | Before (built-in) | After (fast-edit) |
+|-----------|-------------------|-------------------|
+| Edit a file | `Edit` tool → string match → LSP wait | `fe replace` / `fe batch` → instant |
+| Create a file | `Write` tool → full content output | `fe paste --stdin` or `fe fast-generate` |
+| Multiple edits | 3× Edit calls (~15s) | 1× `fe batch` (<0.1s) |
+| Large file (200+ lines) | Write full content (token limit) | `fe fast-generate` (~70 lines code → 300+ lines output) |
+| Save user paste | Write tool + escape headaches | `fe save-pasted` (zero token) |
+
+The AI agent loads the skill once per session, then all file operations go through fast-edit automatically.
+
+### Method B: Custom Tool Overlay (Seamless)
+
+Method B replaces OpenCode's built-in Edit and Write tools at the tool level. The AI doesn't need to know about fast-edit — it calls Edit/Write as usual, and fast-edit runs transparently under the hood.
+
+#### How It Works: Description-Based Routing
+
+OpenCode exposes each tool's `description` string to the AI as part of the tool schema. The AI reads the description to decide **when** and **how** to use the tool. Custom tools (TypeScript files in `~/.config/opencode/tools/`) override same-named built-in tools completely — including their descriptions.
+
+Our custom tools modify the descriptions with routing hints:
+
+**Built-in Edit description** (simplified):
+> Performs exact string replacements in files. The oldString must match exactly...
+
+**Custom Edit description** (with fast-edit routing):
+> Performs exact string replacements in files. ...
+> **STOP: If you need to replace a large block (>80 lines)** with repetitive/structured content, do NOT output the full newString here — you will waste tokens. Instead: `skill('fast-edit')`, then use `fe fast-batch --stdin` or `fe fast-generate` via Bash.
+
+**Built-in Write description** (simplified):
+> Writes a file to the local filesystem. Overwrites existing files...
+
+**Custom Write description** (with fast-edit routing):
+> Writes a file to the local filesystem. ...
+> **STOP: For NEW files >150 lines** with repetitive/structured content, do NOT use this tool — you will waste tokens. Instead: `skill('fast-edit')`, then `fe fast-generate --stdin -o FILE` with ≤80 lines of Python generator code.
+
+#### Routing Flow
+
+```
+AI task: edit or write a file
+  │
+  ├─ Small edit (<80 lines)
+  │    → AI calls Edit tool
+  │    → edit.ts intercepts: oldString → findLineRange → fe fast-batch --stdin
+  │    → Result returned to AI (transparent)
+  │
+  ├─ Small write (<150 lines)
+  │    → AI calls Write tool
+  │    → write.ts intercepts: content → fe fast-paste --stdin
+  │    → Result returned to AI (transparent)
+  │
+  ├─ Large edit (>80 lines, structured)
+  │    → AI reads Edit description → sees STOP hint
+  │    → AI loads skill('fast-edit') → uses fe fast-generate via Bash
+  │
+  └─ Large write (>150 lines, structured)
+       → AI reads Write description → sees STOP hint
+       → AI loads skill('fast-edit') → uses fe fast-generate via Bash
+```
+
+#### Step 1: Install the skill
+
+```bash
+git clone https://github.com/includewudi/fast-edit.git ~/.config/opencode/skills/fast-edit
+```
+
+#### Step 2: Copy custom tools
+
+```bash
+cp ~/.config/opencode/skills/fast-edit/opencode-tools/*.ts ~/.config/opencode/tools/
+```
+
+This installs two files:
+- `edit.ts` — Overrides built-in Edit. Translates string-match edits into `fe fast-batch` line-number operations.
+- `write.ts` — Overrides built-in Write. Delegates file writes to `fe fast-paste --stdin`.
+
+#### Step 3 (Optional): Add rules for large file support
+
+Method B handles small/medium edits transparently. For large file generation (>150 lines), the description hints tell the AI to load the skill. You can optionally add a minimal rules block to reinforce this:
+
+```
+[FAST-EDIT]
+For user-pasted content, prefer save-pasted (zero token, zero escaping).
+```
+
+No `skill("fast-edit")` trigger needed — the custom tools handle routing automatically.
+
+#### What the AI Experiences
+
+| Operation | What AI Does | What Actually Happens |
+|-----------|-------------|----------------------|
+| Edit a file | Calls Edit tool normally | `edit.ts` → `fe fast-batch` (instant, with backup) |
+| Write a file | Calls Write tool normally | `write.ts` → `fe fast-paste` (with backup) |
+| Write >150 lines | Sees STOP hint in description | AI loads skill, uses `fe fast-generate` |
+| Edit >80 lines | Sees STOP hint in description | AI loads skill, uses `fe fast-batch`/`fe fast-generate` |
 
 ## Quick Start
 
@@ -83,13 +221,16 @@ fe write files_spec.json
 
 # Type check
 fe check myfile.py
-```
 
 # Generate file from code
 echo 'import json; print(json.dumps({"key": "value"}))' | fe generate --stdin -o output.json
 
 # Generate multiple files from code
 python3 gen_script.py | fe generate --stdin
+
+# Start end-to-end timer
+fe timer start
+```
 
 ## Commands
 
@@ -265,6 +406,23 @@ fe check myfile.py --checker mypy
 
 Auto-detection order: `basedpyright` → `pyright` → `mypy`
 
+### `timer start` / `timer stop TIMER_ID`
+
+Track end-to-end elapsed time, including AI thinking time.
+
+```bash
+# Start a timer (returns a timer_id)
+fe timer start
+# → {"status": "ok", "timer_id": "t_a1b2c3d4", "started_at": "2025-01-01T12:00:00.000000"}
+
+# Stop and get total elapsed time
+fe timer stop t_a1b2c3d4
+# → {"status": "ok", "timer_id": "t_a1b2c3d4", "elapsed_sec": 42.5}
+```
+
+When used with `generate --timer`, the timing output includes both script execution time (`elapsed_sec`) and total time from timer start (`total_elapsed_sec`). This captures the full cycle: skill load → AI reasoning → code execution → file write.
+
+Timer data is stored in `/tmp/fe-timers/` and cleaned up on stop.
 
 ### `generate [--stdin] [-o FILE] [SCRIPT] [--timeout N] [--interpreter CMD] [--no-validate]`
 
@@ -298,6 +456,7 @@ fe generate --stdin -o out.json --timeout 60 --interpreter python3.12 --no-valid
 | `--timeout N` | Execution timeout in seconds | 30 |
 | `--interpreter CMD` | Command to run the code | `python3` |
 | `--no-validate` | Skip JSON validation for .json files | Validate |
+| `--timer ID` | Attach a timer (from `fe timer start`) for end-to-end timing | - |
 
 **Why use generate?** When AI needs to create large files (200+ lines), the LLM output token limit becomes the bottleneck. All file-writing tools require the LLM to output full content. `generate` lets the LLM write compact code (~70 lines) that *generates* the content (~375+ lines) — a 5x+ compression ratio.
 
@@ -313,6 +472,7 @@ fe generate --stdin -o out.json --timeout 60 --interpreter python3.12 --no-valid
 | Save from clipboard | `paste` |
 | Type check after editing | `check` |
 | AI generates large/bulk files (200+ lines) | `generate --stdin -o FILE` or `generate --stdin` |
+| Measure end-to-end task time (incl. AI thinking) | `timer start` → work → `generate --timer ID` |
 
 ## Typical Workflows
 
@@ -400,6 +560,8 @@ fast-edit/
 ├── generate.py    # Code generation → file writing
 ├── check.py       # Type checking
 ├── verify.py      # Verify/backup/restore/syntax check
+├── timer.py       # End-to-end timing (timer start/stop)
+├── opencode-tools/  # Custom tool overlays for OpenCode (edit.ts, write.ts)
 ├── skill.md       # Detailed usage documentation (Chinese)
 ├── TEST_PLAN.md   # Test plan and results
 ├── requirements.txt  # Optional dependencies
