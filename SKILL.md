@@ -1,6 +1,6 @@
 ---
 name: fast-edit
-description: 大文件编辑、批量修改、剪贴板/stdin粘贴、多文件写入、编辑验证/回滚。用于替代慢速的 Edit/Write 工具。（重构测试版）
+description: 大文件编辑、批量修改、剪贴板/stdin粘贴、多文件写入、编辑验证/回滚(undo/rollback/restore)、新文件创建。用于替代慢速的 Edit/Write 工具。（重构测试版）
 ---
 
 # Fast Edit
