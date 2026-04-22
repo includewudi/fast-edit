@@ -1,6 +1,6 @@
 ---
 name: fast-edit
-description: 大文件编辑、批量修改、剪贴板/stdin粘贴、多文件写入、编辑验证/回滚(undo/rollback/restore)、新文件创建。用于替代慢速的 Edit/Write 工具。（重构测试版）
+description: "大文件编辑、批量修改、剪贴板粘贴、多文件写入、编辑验证与回滚、新文件创建。替代 Edit/Write 工具，绕过 LSP 等待与权限弹窗。Use when: editing large files, bulk editing multiple locations, pasting from clipboard/stdin, undo/rollback/restore after edits, creating new files, batch modifications, or multi-file writes."
 ---
 
 # Fast Edit
@@ -27,24 +27,10 @@ description: 大文件编辑、批量修改、剪贴板/stdin粘贴、多文件�
   │    ├─ 降级: paste --stdin（save-pasted 失败时）
   │    └─ 特殊字符多: paste --stdin --base64
   │
-  ├─ 从零创建新文件（见 §守则3）
-  │    │  ⚠️ 默认策略：任何犹豫 → 直接走分段写入
-  │    │
-  │    ├─ 步骤1: 预估行数
-  │    │    ├─ ≤120 行 → 单段 cat > file << 'EOF'
-  │    │    └─ >120 行 / 不确定 → 必须分段（继续步骤2）
-  │    │
-  │    ├─ 步骤2（可选优化，5秒内决定）:
-  │    │    同一模板重复≥5次 + ≤80行Python可表达？
-  │    │    YES → fast-generate --stdin（见 skills/large-file.md）
-  │    │    NO / 不确定 → 分段写入（禁止回头重新评估）
-  │    │
-  │    └─ 分段写入（DEFAULT，见 skills/large-file.md）:
-  │         每段 ≤120 行，MUST 用 << 'EOF' 引号 heredoc
-  │         第1段: cat > file << 'EOF'（覆写）
-  │         后续段: cat >> file << 'EOF'（追加）
-  │         写完: wc -l FILE 校验行数
-  │         失败: rm file → 从头重写，MUST NOT 续写半成品
+  ├─ 从零创建新文件 → 完整流程见 §守则3
+  │    ├─ ≤120 行 → 单段 cat > file << 'EOF'
+  │    ├─ >120 行 → 分段 heredoc 或 fast-generate（见 skills/large-file.md）
+  │    └─ 犹豫 → 直接走分段写入（DEFAULT）
   │
   ├─ 编辑出错，需要恢复
   │    ├─ 刚编辑的文件 → restore（一键回滚）
@@ -380,19 +366,3 @@ fast-edit/
 | AI Token 输出 | old+new 字符串 | **仅行号+内容** |
 | LSP 等待 | 每次 0-5s | **0** |
 
-## 编辑后验证
-
-**推荐**：编辑完成后调用 `lsp_diagnostics` 检查类型错误：
-
-```
-lsp_diagnostics(filePath="/path/to/edited_file.py")
-```
-
-**备选**：如果 LSP 不可用：
-
-| 方式 | 优点 | 缺点 |
-|------|------|------|
-| `lsp_diagnostics` | 快（LSP 热启动）、支持所有语言 | 需要 LSP 服务运行 |
-| `fe verify-syntax` | 多语言语法检查（Go/Py/Rust/C/TS/Java） | 仅检查语法，不检查类型 |
-| `fe verify` | 查看编辑前后差异，确认改对了 | 需要先有备份 |
-| `fe check` | Python 类型检查 | 仅支持 Python |
